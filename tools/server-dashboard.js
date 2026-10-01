@@ -10,6 +10,10 @@ const state = {
   machineCount: 0,
   hostAddress: "",
   players: [],
+  playerStats: {},
+  teamScores: [],
+  statsUpdatedAt: "",
+  statsError: "",
   queue: [],
   updatedAt: "--:--:--",
   events: []
@@ -32,7 +36,17 @@ const mapDescriptions = {
 let lastSnapshot = null;
 let lastConnectionError = "";
 let refreshInProgress = false;
+let statsRefreshInProgress = false;
+let statsRefreshTimer;
 let toastTimer;
+const statsRefreshControl = document.getElementById("statsRefreshInterval");
+const statsRefreshStorageKey = "readyup.statsRefreshInterval";
+const statsRefreshIntervals = new Set(["0", "5", "15", "30", "60"]);
+
+try {
+  const savedInterval = localStorage.getItem(statsRefreshStorageKey);
+  if (statsRefreshIntervals.has(savedInterval)) statsRefreshControl.value = savedInterval;
+} catch {}
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -104,10 +118,11 @@ function renderPlayers() {
     playerCell.append(identity);
     row.append(playerCell);
 
-    for (const value of [player.machine, player.controller, player.team]) {
+    const stats = state.playerStats[player.id] || {};
+    for (const value of [player.team, stats.score, stats.kills, stats.assists, stats.deaths, player.machine, player.controller]) {
       const cell = document.createElement("td");
       cell.className = "mono";
-      cell.textContent = value;
+      cell.textContent = Number.isInteger(value) ? String(value) : value ?? "--";
       row.append(cell);
     }
 
@@ -129,7 +144,7 @@ function renderPlayers() {
   if (unlistedPlayers) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 5;
+    cell.colSpan = 9;
     cell.className = "empty";
     cell.textContent = `${unlistedPlayers} additional player${unlistedPlayers === 1 ? "" : "s"} reported; roster details unavailable`;
     row.append(cell);
@@ -137,7 +152,7 @@ function renderPlayers() {
   } else if (!state.players.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 5;
+    cell.colSpan = 9;
     cell.className = "empty";
     cell.textContent = state.connected ? "No players connected" : "Waiting for server connection";
     row.append(cell);
@@ -145,6 +160,51 @@ function renderPlayers() {
   }
   document.getElementById("playerCount").textContent = state.playerCount;
   document.getElementById("machineCount").textContent = state.machineCount;
+  renderStatsSummary();
+}
+
+function renderStatsSummary() {
+  const teamScores = document.getElementById("teamScores");
+  teamScores.replaceChildren();
+  state.teamScores.forEach(team => {
+    const item = document.createElement("span");
+    item.className = "team-score";
+    const name = document.createElement("span");
+    name.textContent = team.team;
+    const score = document.createElement("strong");
+    score.textContent = team.score;
+    item.append(name, score);
+    teamScores.append(item);
+  });
+  document.getElementById("statsUpdatedAt").textContent = state.statsError ||
+    (state.statsUpdatedAt ? `STATS ${state.statsUpdatedAt}` : "STATS NOT LOADED");
+}
+
+function scheduleStatsRefresh() {
+  clearTimeout(statsRefreshTimer);
+  const intervalSeconds = Number(statsRefreshControl.value);
+  if (intervalSeconds > 0) {
+    statsRefreshTimer = setTimeout(refreshStats, intervalSeconds * 1000);
+  }
+}
+
+async function refreshStats() {
+  if (statsRefreshInProgress) return;
+  clearTimeout(statsRefreshTimer);
+  statsRefreshInProgress = true;
+  try {
+    const snapshot = await requestJson("/api/stats");
+    state.playerStats = Object.fromEntries(snapshot.players.map(player => [player.id, player]));
+    state.teamScores = snapshot.teams;
+    state.statsUpdatedAt = snapshot.updatedAt;
+    state.statsError = "";
+  } catch {
+    state.statsError = "STATS UNAVAILABLE";
+  } finally {
+    statsRefreshInProgress = false;
+    renderPlayers();
+    scheduleStatsRefresh();
+  }
 }
 
 function renderQueue() {
@@ -274,7 +334,14 @@ document.getElementById("startMatch").addEventListener("click", () => runCommand
 document.getElementById("endMatch").addEventListener("click", () => runCommand("end", "End requested", "amber"));
 document.getElementById("restartMatch").addEventListener("click", () => runCommand("restart", "Restart requested", "amber"));
 document.getElementById("refreshStatus").addEventListener("click", refreshSnapshot);
-document.getElementById("refreshPlayers").addEventListener("click", refreshSnapshot);
+document.getElementById("refreshPlayers").addEventListener("click", refreshStats);
+statsRefreshControl.addEventListener("change", () => {
+  try {
+    localStorage.setItem(statsRefreshStorageKey, statsRefreshControl.value);
+  } catch {}
+  if (Number(statsRefreshControl.value) === 0) scheduleStatsRefresh();
+  else refreshStats();
+});
 document.getElementById("queueForm").addEventListener("submit", event => {
   event.preventDefault();
   const map = document.getElementById("mapSelect").value;
@@ -289,4 +356,5 @@ document.getElementById("clearActivity").addEventListener("click", () => {
 
 render();
 refreshSnapshot();
+if (Number(statsRefreshControl.value) > 0) refreshStats();
 setInterval(refreshSnapshot, 3000);

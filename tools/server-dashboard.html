@@ -147,6 +147,14 @@
     .panel { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
     .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 49px; padding: 0 15px; border-bottom: 1px solid var(--line); }
     .panel-heading h2 { margin: 0; font: 700 13px var(--display); }
+    .panel-tools { display: flex; align-items: center; gap: 8px; }
+    .stats-refresh-control { display: flex; align-items: center; gap: 6px; color: var(--muted); font: 10px var(--mono); }
+    .stats-refresh-control select { width: 88px; height: 30px; padding: 0 7px; }
+    .score-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+    .team-scores { display: flex; flex-wrap: wrap; gap: 14px; }
+    .team-score { display: flex; align-items: baseline; gap: 7px; color: var(--muted); font: 10px var(--mono); }
+    .team-score strong { color: var(--ink); font-size: 13px; }
+    .stats-updated { flex: 0 0 auto; color: var(--muted); font: 9px var(--mono); }
     .panel-kicker { color: var(--muted); font: 10px var(--mono); }
     .panel-body { padding: 15px; }
 
@@ -253,6 +261,9 @@
       .queue-form { grid-template-columns: 1fr 1fr; }
       .queue-form .button { grid-column: 1 / -1; }
       .panel-heading, .panel-body { padding-left: 12px; padding-right: 12px; }
+      .panel-heading { align-items: flex-start; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+      .panel-tools { width: 100%; justify-content: space-between; }
+      .score-summary { align-items: flex-start; flex-direction: column; gap: 5px; }
       .footer-note { display: grid; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -356,12 +367,27 @@
 
           <section class="panel" id="players" aria-labelledby="players-title">
             <div class="panel-heading">
-              <h2 id="players-title">Connected players</h2>
-              <button class="button small" id="refreshPlayers">Refresh</button>
+              <h2 id="players-title">Live scoreboard</h2>
+              <div class="panel-tools">
+                <label class="stats-refresh-control" for="statsRefreshInterval">Stats refresh
+                  <select id="statsRefreshInterval">
+                    <option value="0">Manual</option>
+                    <option value="5">5 sec</option>
+                    <option value="15" selected>15 sec</option>
+                    <option value="30">30 sec</option>
+                    <option value="60">60 sec</option>
+                  </select>
+                </label>
+                <button class="button small" id="refreshPlayers">Refresh stats</button>
+              </div>
+            </div>
+            <div class="score-summary">
+              <div class="team-scores" id="teamScores" aria-label="Team scores"></div>
+              <span class="stats-updated" id="statsUpdatedAt">Stats not loaded</span>
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Player</th><th>Machine</th><th>Controller</th><th>Team</th><th></th></tr></thead>
+                <thead><tr><th>Player</th><th>Team</th><th>Score</th><th>K</th><th>A</th><th>D</th><th>Machine</th><th>Controller</th><th></th></tr></thead>
                 <tbody id="playersBody"></tbody>
               </table>
             </div>

@@ -147,7 +147,7 @@ class ConsoleBridge:
                 raise
 
     def command(self, command):
-        if command in {"status", "currentmap", "players", "mapqueue", "listmaps", "start", "end", "restart", "nextmap"}:
+        if command in {"status", "currentmap", "players", "stats", "mapqueue", "listmaps", "start", "end", "restart", "nextmap"}:
             return self.commands([command])[0]
         if re.fullmatch(r"gametype [a-z_]+", command):
             if command.split(" ", 1)[1] not in GAME_TYPES:
@@ -225,6 +225,36 @@ class ConsoleBridge:
             "updatedAt": time.strftime("%H:%M:%S"),
         }
 
+    def stats_snapshot(self):
+        stats_text = self.commands(["stats"])[0].replace("\r", "")
+        if not re.search(r"(?m)^OK stats(?:\s|$)", stats_text):
+            raise RuntimeError("Could not read server stats")
+
+        def value_or_none(value):
+            return None if value == "na" else int(value)
+
+        teams = []
+        for match in re.finditer(r"(?m)^team id=(\d+) score=(-?\d+)$", stats_text):
+            team_index, score = match.groups()
+            teams.append({"id": int(team_index), "team": f"Team {int(team_index) + 1}", "score": int(score)})
+
+        players = []
+        pattern = re.compile(
+            r"(?m)^stat id=(-?\d+) score=(-?\d+|na) kills=(-?\d+|na) "
+            r"assists=(-?\d+|na) deaths=(-?\d+|na)$"
+        )
+        for match in pattern.finditer(stats_text):
+            player_id, score, kills, assists, deaths = match.groups()
+            players.append({
+                "id": int(player_id),
+                "score": value_or_none(score),
+                "kills": value_or_none(kills),
+                "assists": value_or_none(assists),
+                "deaths": value_or_none(deaths),
+            })
+
+        return {"players": players, "teams": teams, "updatedAt": time.strftime("%H:%M:%S")}
+
 
 class DashboardHandler(SimpleHTTPRequestHandler):
     bridge = None
@@ -260,6 +290,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/snapshot":
             try:
                 self._json(200, self.bridge.snapshot())
+            except Exception as error:
+                self._json(503, {"error": str(error)})
+            return
+        if self.path == "/api/stats":
+            try:
+                self._json(200, self.bridge.stats_snapshot())
             except Exception as error:
                 self._json(503, {"error": str(error)})
             return

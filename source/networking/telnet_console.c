@@ -524,6 +524,82 @@ static boolean telnet_console_admin_command(
 		telnet_console_admin_reply(client, response);
 		return TRUE;
 	}
+	if (!strcmp(command, "stats"))
+	{
+		long team_index;
+		long player_index;
+		long count = 0;
+
+		if (!server || !game)
+		{
+			telnet_console_admin_reply(client, "ERR no hosted game");
+			return TRUE;
+		}
+		telnet_console_admin_reply(client, "OK stats");
+		if (game_engine && game_engine->get_player_score &&
+			game->variant.universal_variant.teams)
+		{
+			for (team_index = 0; team_index < MAXIMUM_MULTIPLAYER_GAME_TEAMS; team_index++)
+			{
+				snprintf(response, sizeof(response), "team id=%ld score=%ld",
+					team_index, game_engine_get_team_score(team_index));
+				telnet_console_admin_reply(client, response);
+			}
+		}
+		for (player_index = 0; player_index < NUMBEROF(game->players); player_index++)
+		{
+			struct network_player *player = &game->players[player_index];
+			struct data_iterator iterator;
+			struct player_datum *datum;
+			long datum_index = NONE;
+
+			if (!network_player_is_valid(player))
+				continue;
+			data_iterator_new(&iterator, player_data);
+			while ((datum = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+			{
+				if (datum->network_player_data.machine_index == player->machine_index &&
+					datum->network_player_data.controller_index == player->controller_index)
+				{
+					datum_index = iterator.datum_index;
+					break;
+				}
+			}
+			if (datum_index == NONE)
+			{
+				snprintf(response, sizeof(response),
+					"stat id=%ld score=na kills=na assists=na deaths=na", player_index);
+			}
+			else
+			{
+				datum = player_get(datum_index);
+				if (game_engine && game_engine->get_player_score)
+				{
+					snprintf(response, sizeof(response),
+						"stat id=%ld score=%ld kills=%ld assists=%ld deaths=%ld",
+						player_index,
+						game_engine->get_player_score(datum_index, _get_score_individual),
+						(long)datum->statistics.kills[0],
+						(long)datum->statistics.assists[0],
+						(long)datum->statistics.deaths);
+				}
+				else
+				{
+					snprintf(response, sizeof(response),
+						"stat id=%ld score=na kills=%ld assists=%ld deaths=%ld",
+						player_index,
+						(long)datum->statistics.kills[0],
+						(long)datum->statistics.assists[0],
+						(long)datum->statistics.deaths);
+				}
+			}
+			telnet_console_admin_reply(client, response);
+			count++;
+		}
+		if (!count)
+			telnet_console_admin_reply(client, "stats=0");
+		return TRUE;
+	}
 	if (!strcmp(command, "players"))
 	{
 		long player_index;
