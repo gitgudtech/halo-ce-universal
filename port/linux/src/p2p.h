@@ -70,6 +70,8 @@ void p2p_socket_closed(int socket, unsigned short datagram_port);
 /* text for the clipboard (a new invite link), once; NULL if none. Called
 from the main thread */
 const char *p2p_take_clipboard_text(void);
+/* copies the current host invite; returns zero unless hosting */
+int p2p_host_invite(char *destination, int size);
 
 /* the hosted game's players and the most it takes, which Discord shows
 (0, 0: not hosting; until the game says, the machines the tunnel reaches

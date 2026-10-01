@@ -14,9 +14,11 @@ import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
 
 TOOLS_DIR = Path(__file__).resolve().parent
+UPDATE_REPOSITORY = "gitgudtech/halo-ce-universal"
 MAPS = {
     "beavercreek": "Beaver Creek",
     "sidewinder": "Sidewinder",
@@ -147,7 +149,7 @@ class ConsoleBridge:
                 raise
 
     def command(self, command):
-        if command in {"status", "currentmap", "players", "stats", "mapqueue", "listmaps", "start", "end", "restart", "nextmap"}:
+        if command in {"status", "currentmap", "players", "stats", "invite", "mapqueue", "listmaps", "start", "end", "restart", "nextmap"}:
             return self.commands([command])[0]
         if re.fullmatch(r"gametype [a-z_]+", command):
             if command.split(" ", 1)[1] not in GAME_TYPES:
@@ -166,7 +168,9 @@ class ConsoleBridge:
         raise ValueError("Command is not allowed by the dashboard bridge")
 
     def snapshot(self):
-        status_text, players_text, queue_text = self.commands(["status", "players", "mapqueue"])
+        status_text, players_text, queue_text, version_text = self.commands(
+            ["status", "players", "mapqueue", "version"]
+        )
         status_match = re.search(
             r"OK status=(\S+) map=(\S+) gametype=(\S+) players=(\d+) machines=(\d+)",
             status_text,
@@ -174,6 +178,7 @@ class ConsoleBridge:
         if not status_match:
             raise RuntimeError("Could not parse server status")
         phase, map_path, game_type, player_count, machine_count = status_match.groups()
+        version_match = re.search(r"(?m)^OK version=(\d+)$", version_text.replace("\r", ""))
         map_alias = map_path.rsplit("\\", 1)[-1]
 
         players = []
@@ -220,6 +225,7 @@ class ConsoleBridge:
             "gameTypeAlias": game_type,
             "playerCount": int(player_count),
             "machineCount": int(machine_count),
+            "buildNumber": int(version_match.group(1)) if version_match else None,
             "players": players,
             "queue": queue,
             "updatedAt": time.strftime("%H:%M:%S"),
@@ -254,6 +260,43 @@ class ConsoleBridge:
             })
 
         return {"players": players, "teams": teams, "updatedAt": time.strftime("%H:%M:%S")}
+
+    def invite_url(self):
+        response = self.command("invite").replace("\r", "")
+        match = re.search(r"(?m)^OK invite=(halo://join/[0-9a-f]{64})$", response)
+        if not match:
+            raise RuntimeError("Server did not return an active invite link")
+        return {"url": match.group(1)}
+
+    def update_check(self):
+        version_text = self.commands(["version"])[0].replace("\r", "")
+        version_match = re.search(r"(?m)^OK version=(\d+)$", version_text)
+        if not version_match:
+            raise RuntimeError("Could not read the server build number")
+
+        request = Request(
+            f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases/latest",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Ready-Up-Halo-Server",
+            },
+        )
+        with urlopen(request, timeout=10) as response:
+            release = json.load(response)
+
+        tag = release.get("tag_name", "")
+        latest_match = re.fullmatch(r"build-(\d+)", tag)
+        if not latest_match:
+            raise RuntimeError("The latest fork release is not a build-N release")
+        current_build = int(version_match.group(1))
+        latest_build = int(latest_match.group(1))
+        return {
+            "currentBuild": current_build,
+            "latestBuild": latest_build,
+            "updateAvailable": latest_build > current_build,
+            "releaseUrl": release.get("html_url"),
+            "checkedAt": time.strftime("%H:%M:%S"),
+        }
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
@@ -296,6 +339,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/stats":
             try:
                 self._json(200, self.bridge.stats_snapshot())
+            except Exception as error:
+                self._json(503, {"error": str(error)})
+            return
+        if self.path == "/api/invite":
+            try:
+                self._json(200, self.bridge.invite_url())
+            except Exception as error:
+                self._json(503, {"error": str(error)})
+            return
+        if self.path == "/api/update-check":
+            try:
+                self._json(200, self.bridge.update_check())
             except Exception as error:
                 self._json(503, {"error": str(error)})
             return

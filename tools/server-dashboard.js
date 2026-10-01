@@ -6,6 +6,7 @@ const state = {
   phase: "Connecting",
   map: "",
   gameType: "",
+  buildNumber: null,
   playerCount: 0,
   machineCount: 0,
   hostAddress: "",
@@ -14,6 +15,9 @@ const state = {
   teamScores: [],
   statsUpdatedAt: "",
   statsError: "",
+  updateStatus: "Not checked",
+  updateAvailable: false,
+  updateReleaseUrl: "",
   queue: [],
   updatedAt: "--:--:--",
   events: []
@@ -37,8 +41,10 @@ let lastSnapshot = null;
 let lastConnectionError = "";
 let refreshInProgress = false;
 let statsRefreshInProgress = false;
+let updateCheckInProgress = false;
 let statsRefreshTimer;
 let toastTimer;
+let currentInviteUrl = "";
 const statsRefreshControl = document.getElementById("statsRefreshInterval");
 const statsRefreshStorageKey = "readyup.statsRefreshInterval";
 const statsRefreshIntervals = new Set(["0", "5", "15", "30", "60"]);
@@ -207,6 +213,68 @@ async function refreshStats() {
   }
 }
 
+async function checkForUpdates() {
+  if (updateCheckInProgress) return;
+  updateCheckInProgress = true;
+  state.updateStatus = "Checking fork releases";
+  render();
+  try {
+    const update = await requestJson("/api/update-check");
+    state.updateAvailable = update.updateAvailable;
+    state.updateReleaseUrl = update.releaseUrl || "";
+    if (update.updateAvailable) {
+      const current = update.currentBuild > 0 ? `current ${update.currentBuild}` : "current build unknown";
+      state.updateStatus = `Build ${update.latestBuild} available (${current})`;
+      logEvent(`Update available | build ${update.latestBuild}`, "amber");
+    } else {
+      state.updateStatus = `Up to date | build ${update.currentBuild}`;
+      logEvent(`Server is up to date | build ${update.currentBuild}`);
+    }
+  } catch (error) {
+    state.updateAvailable = false;
+    state.updateReleaseUrl = "";
+    state.updateStatus = "Update check failed";
+    logEvent(`Update check failed | ${error.message}`, "red");
+  } finally {
+    updateCheckInProgress = false;
+    render();
+  }
+}
+
+async function showInvite() {
+  const button = document.getElementById("showInvite");
+  const status = document.getElementById("inviteStatus");
+  button.disabled = true;
+  status.textContent = "Loading invite";
+  try {
+    const result = await requestJson("/api/invite");
+    currentInviteUrl = result.url;
+    const input = document.getElementById("inviteUrl");
+    input.value = currentInviteUrl;
+    input.hidden = false;
+    button.textContent = "Refresh invite";
+    document.getElementById("copyInvite").hidden = false;
+    status.textContent = "Works while this host is running";
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function copyInvite() {
+  if (!currentInviteUrl) return;
+  try {
+    await navigator.clipboard.writeText(currentInviteUrl);
+    notify("Invite URL copied");
+  } catch {
+    const input = document.getElementById("inviteUrl");
+    input.focus();
+    input.select();
+    notify("Select and copy the invite URL");
+  }
+}
+
 function renderQueue() {
   const list = document.getElementById("queueList");
   list.replaceChildren();
@@ -257,6 +325,9 @@ function render() {
   document.getElementById("actionState").textContent = state.connected ? `${state.phase.toUpperCase()} | LIVE` : "DISCONNECTED";
   document.getElementById("connectionBadge").textContent = state.connected ? "LIVE VIA SSH TUNNEL" : "CONNECTING TO HOST";
   document.getElementById("connectionDetail").textContent = state.connected ? "127.0.0.1 bridge" : "Local bridge unavailable";
+  document.getElementById("buildNumber").textContent = state.buildNumber > 0
+    ? `Build ${state.buildNumber}`
+    : state.connected && state.serverRunning ? "Unversioned" : "--";
   document.getElementById("uptime").textContent = state.updatedAt;
   document.getElementById("serverAddress").textContent = state.hostAddress || "--";
   document.getElementById("serverAddressDetail").textContent = state.hostAddress || "--";
@@ -264,6 +335,12 @@ function render() {
   document.getElementById("startMatch").disabled = !state.connected || !state.serverRunning || state.phase === "In Match";
   document.getElementById("endMatch").disabled = !state.connected || !state.serverRunning || state.phase !== "In Match";
   document.getElementById("restartMatch").disabled = !state.connected || !state.serverRunning || !["In Match", "Postgame"].includes(state.phase);
+  document.getElementById("checkUpdates").disabled = !state.connected || !state.serverRunning || updateCheckInProgress;
+  document.getElementById("checkUpdates").textContent = updateCheckInProgress ? "Checking..." : "Check for updates";
+  document.getElementById("updateStatus").textContent = state.updateStatus;
+  const releaseLink = document.getElementById("updateReleaseLink");
+  releaseLink.hidden = !state.updateAvailable || !state.updateReleaseUrl;
+  releaseLink.href = state.updateReleaseUrl || "#";
   document.getElementById("queueForm").querySelector("button").disabled = !state.connected || !state.serverRunning;
   renderPlayers();
   renderQueue();
@@ -284,6 +361,7 @@ async function refreshSnapshot() {
     state.map = snapshot.map;
     state.mapAlias = snapshot.mapAlias;
     state.gameType = snapshot.gameType;
+    state.buildNumber = snapshot.buildNumber;
     state.playerCount = snapshot.playerCount;
     state.machineCount = snapshot.machineCount;
     state.hostAddress = snapshot.hostAddress;
@@ -334,6 +412,9 @@ document.getElementById("startMatch").addEventListener("click", () => runCommand
 document.getElementById("endMatch").addEventListener("click", () => runCommand("end", "End requested", "amber"));
 document.getElementById("restartMatch").addEventListener("click", () => runCommand("restart", "Restart requested", "amber"));
 document.getElementById("refreshStatus").addEventListener("click", refreshSnapshot);
+document.getElementById("checkUpdates").addEventListener("click", checkForUpdates);
+document.getElementById("showInvite").addEventListener("click", showInvite);
+document.getElementById("copyInvite").addEventListener("click", copyInvite);
 document.getElementById("refreshPlayers").addEventListener("click", refreshStats);
 statsRefreshControl.addEventListener("change", () => {
   try {

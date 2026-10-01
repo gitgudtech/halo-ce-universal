@@ -2575,6 +2575,25 @@ const char *p2p_take_clipboard_text(void)
 	return result;
 }
 
+int p2p_host_invite(char *destination, int size)
+{
+	int available = 0;
+	size_t invite_size;
+
+	if (!destination || size <= 0)
+		return 0;
+	destination[0] = 0;
+	pthread_mutex_lock(&p2p_lock);
+	invite_size = strlen(p2p.invite);
+	if (p2p.running && p2p.hosting && invite_size > 0 && invite_size < (size_t)size)
+	{
+		memcpy(destination, p2p.invite, invite_size + 1);
+		available = 1;
+	}
+	pthread_mutex_unlock(&p2p_lock);
+	return available;
+}
+
 /* ---------- invites from elsewhere */
 
 /* the first command line argument holding an invite (or an older

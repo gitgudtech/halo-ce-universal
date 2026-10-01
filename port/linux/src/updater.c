@@ -46,6 +46,11 @@ update.h's: posix_update.c on Linux, win32_update.c on Windows.
 #define HALO_BUILD_FLAVOR "release"
 #endif
 
+long updater_build_number(void)
+{
+	return HALO_BUILD_NUMBER;
+}
+
 #define UPDATE_REPOSITORY "gitgudtech/halo-ce-universal"
 #ifdef _WIN32
 #define UPDATE_PLATFORM "windows"

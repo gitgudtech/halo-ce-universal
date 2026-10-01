@@ -100,6 +100,8 @@ struct telnet_console_globals
 /* the platform layer's (port/linux/src/port_config.c) */
 int config_boolean(const char *name);
 long config_integer(const char *name);
+long updater_build_number(void);
+int p2p_host_invite(char *destination, int size);
 
 static boolean telnet_client_write(
 	struct telnet_client *client,
@@ -513,6 +515,24 @@ static boolean telnet_console_admin_command(
 			phase, map_name ? map_name : "unknown", telnet_console_gametype_name(&variant),
 			network_game_server_get_player_count(server), network_game_server_get_machine_count(server));
 		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strcmp(command, "version"))
+	{
+		snprintf(response, sizeof(response), "OK version=%ld", updater_build_number());
+		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strcmp(command, "invite"))
+	{
+		char invite[128];
+		if (!p2p_host_invite(invite, sizeof(invite)))
+			telnet_console_admin_reply(client, "ERR no active internet invite");
+		else
+		{
+			snprintf(response, sizeof(response), "OK invite=%s", invite);
+			telnet_console_admin_reply(client, response);
+		}
 		return TRUE;
 	}
 	if (!strcmp(command, "currentmap"))

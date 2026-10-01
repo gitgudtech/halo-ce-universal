@@ -189,6 +189,9 @@
     .map-detail { display: flex; justify-content: space-between; gap: 12px; padding-top: 9px; margin-top: 9px; border-top: 1px solid #e5ebe5; font-size: 11px; }
     .map-detail span:first-child { color: var(--muted); }
     .map-detail span:last-child { font-family: var(--mono); }
+    .invite-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+    .invite-url { flex: 1 1 100%; min-width: 0; height: 32px; padding: 0 8px; color: var(--ink); border: 1px solid #cbd6ce; border-radius: 4px; background: #fff; font: 10px var(--mono); }
+    .invite-status { color: var(--muted); font: 9px var(--mono); }
 
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
@@ -310,6 +313,9 @@
         <button class="button" id="restartMatch">Restart match</button>
         <span class="action-spacer"></span>
         <button class="button" id="refreshStatus">Refresh status</button>
+        <button class="button" id="checkUpdates">Check for updates</button>
+        <span class="session-state" id="updateStatus" aria-live="polite">Not checked</span>
+        <a class="session-state" id="updateReleaseLink" target="_blank" rel="noreferrer" hidden>View release</a>
         <span class="session-state" id="actionState">LOBBY READY</span>
       </section>
 
@@ -330,9 +336,9 @@
           <div class="metric-note"><span id="machineCount">1</span> machine connected</div>
         </article>
         <article class="metric">
-          <div class="metric-head">Last sync <span class="metric-mark"></span></div>
-          <div class="metric-value" id="uptime">--:--:--</div>
-          <div class="metric-note">Updated from host</div>
+          <div class="metric-head">Server build <span class="metric-mark"></span></div>
+          <div class="metric-value" id="buildNumber">--</div>
+          <div class="metric-note">Last sync <span id="uptime">--:--:--</span></div>
         </article>
       </section>
 
@@ -360,6 +366,12 @@
                   <div class="map-detail"><span>Game type</span><span id="gameType">Team Slayer</span></div>
                   <div class="map-detail"><span>Netcode</span><span>Distributed</span></div>
                   <div class="map-detail"><span>Server address</span><span id="serverAddressDetail">--</span></div>
+                  <div class="invite-tools">
+                    <button class="button small" id="showInvite" type="button">Show invite URL</button>
+                    <input class="invite-url" id="inviteUrl" type="text" readonly aria-label="Internet game invite URL" hidden>
+                    <button class="button small" id="copyInvite" type="button" hidden>Copy URL</button>
+                    <span class="invite-status" id="inviteStatus" aria-live="polite"></span>
+                  </div>
                 </div>
               </div>
             </div>
