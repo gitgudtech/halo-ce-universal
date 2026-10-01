@@ -85,6 +85,7 @@ jobs:
           retention-days: 3
 
   android:
+    if: ${{ github.ref != 'refs/heads/readyup-v1' }}
     # The runner image has the Android SDK and NDK, a JDK and CMake.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -216,12 +217,14 @@ jobs:
           retention-days: 3
 
   release:
-    # The six builds as a release, tagged build-<run number> and marked latest
-    # (every file keeps its name from release to release, for the README's
-    # latest/download links); then all but the newest five build-* releases
-    # go, tags and all. Only for main, and only when every platform built.
+    # Main publishes all platforms; readyup-v1 publishes Linux and Windows.
     needs: [linux, android, windows]
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: >-
+      always() &&
+      ((github.ref == 'refs/heads/main' && needs.linux.result == 'success' &&
+        needs.android.result == 'success' && needs.windows.result == 'success') ||
+       (github.ref == 'refs/heads/readyup-v1' && needs.linux.result == 'success' &&
+        needs.windows.result == 'success'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -240,7 +243,12 @@ jobs:
       - name: Package
         run: |
           mkdir release
-          for build in artifacts/*/; do
+          if [[ "$GITHUB_REF" == "refs/heads/readyup-v1" ]]; then
+            builds=(artifacts/halo-linux-release/ artifacts/halo-windows-release/)
+          else
+            builds=(artifacts/*/)
+          fi
+          for build in "${builds[@]}"; do
             name="$(basename "$build")"
             # stored, not deflated: the updater in builds up to 57 waits for
             # an end of stream the game's zlib 1.1 does not always report,
@@ -256,12 +264,19 @@ jobs:
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          tag="build-$GITHUB_RUN_NUMBER"
+          build_number="$GITHUB_RUN_NUMBER"
+          if [[ "$GITHUB_REF" == "refs/heads/readyup-v1" ]]; then
+            build_number="$((64 + GITHUB_RUN_NUMBER))"
+            build_description="The Linux and Windows release builds are for playing."
+          else
+            build_description="The release builds are for playing; the debug builds stop at the first failed assertion and log it."
+          fi
+          tag="build-$build_number"
           subject="$(printf '%s' "${MESSAGE:-manual run}" | head -n 1)"
-          printf '%s\n\nCommit: %s\nBuild: %s\n\nThe release builds are for playing; the debug builds stop at the first failed assertion and log it.\n' \
-            "$subject" "$COMMIT_URL" "$RUN_URL" > notes.md
+          printf '%s\n\nCommit: %s\nBuild: %s\n\n%s\n' \
+            "$subject" "$COMMIT_URL" "$build_number" "$build_description" > notes.md
           gh release create "$tag" release/*.zip --target "$GITHUB_SHA" --latest \
-            --title "Build $GITHUB_RUN_NUMBER (${GITHUB_SHA:0:7})" --notes-file notes.md
+            --title "Build $build_number (${GITHUB_SHA:0:7})" --notes-file notes.md
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Keep the last five

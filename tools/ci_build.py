@@ -55,11 +55,17 @@ def main() -> int:
     launcher = os.environ.get("CI_COMPILER_LAUNCHER")
     if launcher:
         configure += ["--compiler-launcher", launcher]
-    # a build of main knows its number, which names its release (build-<n>),
-    # for the self-updater (port/linux/src/updater.c, and the Android app);
-    # other builds have none, and never look for updates
-    if os.environ.get("GITHUB_REF") == "refs/heads/main" and os.environ.get("GITHUB_RUN_NUMBER", "").isdigit():
-        os.environ["HALO_BUILD_NUMBER"] = os.environ["GITHUB_RUN_NUMBER"]
+    # Builds of main use the workflow run number. The readyup-v1 fork continues
+    # after upstream build 64; other builds do not look for updates.
+    release_ref = os.environ.get("GITHUB_REF")
+    run_number = os.environ.get("GITHUB_RUN_NUMBER", "")
+    if (
+        args.config == "release"
+        and release_ref in {"refs/heads/main", "refs/heads/readyup-v1"}
+        and run_number.isdigit()
+    ):
+        build_number = int(run_number) + (64 if release_ref == "refs/heads/readyup-v1" else 0)
+        os.environ["HALO_BUILD_NUMBER"] = str(build_number)
         print(f"build number {os.environ['HALO_BUILD_NUMBER']}", flush=True)
     run(configure)
 
