@@ -526,6 +526,7 @@ enum
 	not go silent for longer (it sends ten times a second) */
 	NETWORK_GAME_SERVER_JOIN_TIMEOUT = 10 * MILLISECONDS_PER_SECOND,
 	NETWORK_GAME_SERVER_CLIENT_TIMEOUT = 15 * MILLISECONDS_PER_SECOND,
+	NETWORK_GAME_ADMIN_END_RESET_DELAY = 15 * MILLISECONDS_PER_SECOND,
 	/* a machine joining the game in progress, silent while it loads */
 	NETWORK_GAME_SERVER_LATE_JOINER_TIMEOUT = 120 * MILLISECONDS_PER_SECOND,
 	MAXIMUM_ADMIN_MAP_QUEUE = 16,
@@ -681,6 +682,8 @@ struct network_game_server
 	and drops any other that arrives meanwhile) */
 	struct network_player waiting_players[MAXIMUM_NETWORK_PLAYER_COUNT];
 	long waiting_player_count;
+	unsigned long admin_end_time;
+	boolean admin_end_reset_pending;
 };
 
 struct network_game_server_admin_map_entry
@@ -1691,6 +1694,17 @@ void network_game_server_switch_to_postgame(
 	}
 
 	return;
+}
+
+boolean network_game_server_admin_end_match(
+	struct network_game_server *server)
+{
+	if (!server || server->state != _network_game_server_state_ingame)
+		return FALSE;
+	server->admin_end_time = system_milliseconds();
+	server->admin_end_reset_pending = TRUE;
+	game_engine_switch_to_postgame();
+	return TRUE;
 }
 
 boolean network_game_server_graceful_shutdown(
@@ -3719,6 +3733,60 @@ void network_game_server_update_countdown(
 	return;
 }
 
+boolean network_game_server_admin_start_immediately(
+	struct network_game_server *server,
+	char const **failure_reason)
+{
+	if (failure_reason)
+		*failure_reason = NULL;
+	if (!server)
+	{
+		if (failure_reason)
+			*failure_reason = "no hosted game";
+		return FALSE;
+	}
+	if (server->state != _network_game_server_state_pregame)
+	{
+		if (failure_reason)
+			*failure_reason = "server is not in the lobby";
+		return FALSE;
+	}
+	if (!server_has_enough_machines(server))
+	{
+		if (failure_reason)
+			*failure_reason = "not enough joined machines";
+		return FALSE;
+	}
+	if (!server_has_a_player_on_each_machine(server))
+	{
+		if (failure_reason)
+			*failure_reason = "each joined machine needs a player";
+		return FALSE;
+	}
+	if (server_needs_more_teams(server))
+	{
+		if (failure_reason)
+			*failure_reason = "each team needs a player";
+		return FALSE;
+	}
+	if (server->game.player_count < server->game.minimum_players)
+	{
+		if (failure_reason)
+			*failure_reason = "minimum player count is not met";
+		return FALSE;
+	}
+	network_game_server_pause_countdown(server, FALSE);
+	server->countdown_state.adjusted_time_this_tick = FALSE;
+	network_game_server_update_countdown(server,
+		_network_game_server_countdown_event_start_immediately);
+	if (server->countdown_state.active &&
+		countdown_timer_get_time_remaining(&server->countdown_state.timer) == 0)
+		return TRUE;
+	if (failure_reason)
+		*failure_reason = "server countdown did not activate";
+	return FALSE;
+}
+
 /* port: the lobby takes changes (players, machines' and players' settings):
 not once the game has started, which every machine loads from the settings
 sent with its start */
@@ -4277,6 +4345,14 @@ static boolean network_game_server_idle_postgame_tasks(
 {
 	unsigned long now = system_milliseconds();
 	boolean success = TRUE;
+	if (server->admin_end_reset_pending &&
+		now - server->admin_end_time >= NETWORK_GAME_ADMIN_END_RESET_DELAY)
+	{
+		server->admin_end_reset_pending = FALSE;
+		if (!network_game_server_reset_to_pregame(server))
+			network_event("admin-triggered postgame reset failed");
+		return success;
+	}
 
 	/* (the time since, which the milliseconds' wrap leaves right) */
 	if (now - (unsigned long)server->time_of_last_keep_alive > 5UL * MILLISECONDS_PER_SECOND)
@@ -4533,6 +4609,8 @@ boolean network_game_server_reset_to_pregame(
 
 	match_assert(NETWORK_SERVER_MANAGER_FILE, 0x324, server);
 
+	server->admin_end_reset_pending = FALSE;
+	server->admin_end_time = 0;
 	csmemset(&server->countdown_state, 0, sizeof(server->countdown_state));
 	server->next_update_number = 0;
 	server->time_of_first_client_loading_completion = 0;

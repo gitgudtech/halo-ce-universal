@@ -33,6 +33,8 @@ void network_game_server_open_game(
 	struct network_game_server *server);
 void network_game_server_switch_to_postgame(
 	struct network_game_server *server);
+boolean network_game_server_admin_end_match(
+	struct network_game_server *server);
 boolean network_game_server_graceful_shutdown(
 	struct network_game_server *server);
 boolean network_game_server_reset_to_pregame(
@@ -62,6 +64,9 @@ char const *network_game_server_machine_hardware_id(
 void network_game_server_update_ticks(
 	struct network_game_server *server,
 	short tick_count);
+boolean network_game_server_admin_start_immediately(
+	struct network_game_server *server,
+	char const **failure_reason);
 void network_game_server_change_map_name(
 	struct network_game_server *server,
 	char const *map_name);

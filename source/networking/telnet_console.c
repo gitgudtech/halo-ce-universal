@@ -663,23 +663,26 @@ static boolean telnet_console_admin_command(
 	}
 	if (!strcmp(command, "start"))
 	{
+		char const *failure_reason;
+
 		if (!server || !network_game_server_is_pregame(server))
 			telnet_console_admin_reply(client, "ERR start requires a hosted lobby");
+		else if (network_game_server_admin_start_immediately(server, &failure_reason))
+			telnet_console_admin_reply(client, "OK match start requested");
 		else
 		{
-			network_game_client_request_immediate_start();
-			telnet_console_admin_reply(client, "OK match start requested");
+			snprintf(response, sizeof(response), "ERR start blocked: %s", failure_reason);
+			telnet_console_admin_reply(client, response);
 		}
 		return TRUE;
 	}
 	if (!strcmp(command, "end"))
 	{
-		if (!server || !network_game_server_is_ingame(server))
+		if (!network_game_server_admin_end_match(server))
 			telnet_console_admin_reply(client, "ERR end requires an active match");
 		else
 		{
-			game_engine_switch_to_postgame();
-			telnet_console_admin_reply(client, "OK match end requested");
+			telnet_console_admin_reply(client, "OK match ended; lobby reset in 15 seconds");
 		}
 		return TRUE;
 	}
