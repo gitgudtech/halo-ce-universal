@@ -11,6 +11,7 @@ it exists, so that the player's edits and comments stay.
 */
 
 #include "platform.h"
+#include "posix.h"
 #include "port_config.h"
 #include "tomlc17.h"
 
@@ -124,6 +125,8 @@ static const struct config_setting config_settings[] =
 	{ "network.address", _config_string, "\"\"", "HALO_NET_ADDRESS", _environment_value, _platform_all,
 		"This machine's IPv4 address for system link, for a machine on several\n"
 		"networks; empty chooses one." },
+	{ "network.spectator", _config_boolean, "false", "HALO_SPECTATOR", _environment_set_is_true, _platform_desktop,
+		"Do not spawn a biped for local players; use the flying camera." },
 	{ "network.broadcast", _config_string, "\"\"", "HALO_NET_BROADCAST", _environment_value, _platform_all,
 		"Comma-separated IPv4 addresses system link sends its announcements to\n"
 		"instead of the local network's broadcast address (for VPNs); empty for\n"
@@ -184,6 +187,8 @@ static const struct config_setting config_settings[] =
 	{ "debug.network_test_pickup", _config_real, "0.0", "HALO_NETWORK_TEST_PICKUP", _environment_value, _platform_all,
 		"This many seconds into an automated test game the host stands its last\n"
 		"player on a weapon, which a joining player then picks up; 0 never." },
+	{ "debug.headless", _config_boolean, "false", "HALO_HEADLESS", _environment_set_is_true, _platform_desktop,
+		"Run without video, audio output or controller input; the game still ticks at 30 Hz." },
 	{ "debug.network_test_pickup_weapon", _config_string, "\"\"", "HALO_NETWORK_TEST_PICKUP_WEAPON", _environment_value,
 		_platform_all,
 		"The weapon network_test_pickup stands the player on: the first whose tag\n"
@@ -637,6 +642,19 @@ static long config_setting_index(const char *name)
 	return -1;
 }
 
+static int config_command_line_has(const char *name)
+{
+	char argument[128];
+	int index;
+
+	for (index = 1; posix_command_line_argument(index, argument, sizeof(argument)); index++)
+	{
+		if (!strcmp(argument, name))
+			return 1;
+	}
+	return 0;
+}
+
 /* keys in the file that are no setting, likely misspelt */
 static void config_report_unknown_keys(toml_datum_t table)
 {
@@ -743,6 +761,20 @@ static void config_load(void)
 			config_values[index].boolean = 0;
 			break;
 		}
+	}
+
+	if (config_command_line_has("--headless") ||
+		config_command_line_has("--dedicated") ||
+		config_command_line_has("-dedicated"))
+		config_values[config_setting_index("debug.headless")].boolean = 1;
+	if (config_command_line_has("--spectator"))
+		config_values[config_setting_index("network.spectator")].boolean = 1;
+	if (config_values[config_setting_index("debug.headless")].boolean)
+	{
+		config_values[config_setting_index("debug.hidden_window")].boolean = 1;
+		config_values[config_setting_index("debug.null_renderer")].boolean = 1;
+		config_values[config_setting_index("audio.enabled")].boolean = 0;
+		config_values[config_setting_index("display.interpolation")].boolean = 0;
 	}
 }
 

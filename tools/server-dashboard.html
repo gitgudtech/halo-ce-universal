@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14251f">
+  <title>Ready Up | Halo Server</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172720;
+      --muted: #68776e;
+      --line: #d7e0d8;
+      --paper: #f3f6f1;
+      --surface: #fbfcf9;
+      --rail: #14251f;
+      --rail-muted: #a5b7ad;
+      --green: #1f5b49;
+      --green-soft: #e1eee6;
+      --lime: #c9dc79;
+      --amber: #efaa54;
+      --red: #c75542;
+      --cyan: #58c8b8;
+      --mono: "Cascadia Code", Consolas, monospace;
+      --display: Bahnschrift, "Franklin Gothic Medium", "Trebuchet MS", sans-serif;
+      --body: "Trebuchet MS", "Segoe UI", sans-serif;
+      font-family: var(--body);
+      color: var(--ink);
+      background: var(--paper);
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; min-height: 100vh; }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, a:focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 3px;
+    }
+
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+    .rail {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 25px 17px 18px;
+      color: #f3f6f1;
+      background: var(--rail);
+      border-right: 1px solid #263b32;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 0 9px 29px; }
+    .brand-mark {
+      width: 37px;
+      height: 37px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #648779;
+      border-radius: 9px;
+      color: var(--lime);
+      font: 700 15px var(--display);
+      letter-spacing: 1px;
+      background: linear-gradient(145deg, #28483b, #1b3028);
+    }
+    .brand strong { display: block; font: 700 17px var(--display); letter-spacing: 1px; }
+    .brand span { display: block; margin-top: 3px; color: var(--rail-muted); font: 10px var(--mono); }
+    .rail-label { padding: 0 11px; margin: 0 0 9px; color: #81968b; font: 10px var(--mono); text-transform: uppercase; }
+    .nav { display: grid; gap: 5px; }
+    .nav a {
+      display: flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 11px;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      color: #c5d2ca;
+      text-decoration: none;
+      font: 13px var(--display);
+      transition: background .16s ease, color .16s ease;
+    }
+    .nav a:hover { color: white; background: #20382e; }
+    .nav a[aria-current="page"] { color: #f7f8ed; border-color: #426556; background: #294638; }
+    .nav .nav-index { width: 28px; color: #83a191; font: 10px var(--mono); }
+    .rail-bottom { margin-top: auto; padding: 13px 11px 0; border-top: 1px solid #2b4037; }
+    .rail-bottom p { margin: 0; color: var(--rail-muted); font: 10px/1.7 var(--mono); }
+    .rail-bottom strong { color: var(--lime); font-weight: 500; }
+
+    main { min-width: 0; padding: 28px clamp(18px, 3vw, 44px) 36px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 30px; }
+    .crumb { color: var(--muted); font: 11px var(--mono); text-transform: uppercase; }
+    .crumb b { color: var(--green); font-weight: 500; }
+    .demo-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      color: #57391e;
+      border: 1px solid #e4c69d;
+      border-radius: 4px;
+      background: #fff5e5;
+      font: 10px var(--mono);
+      letter-spacing: .2px;
+      white-space: nowrap;
+    }
+    .demo-tag::before { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); content: ""; }
+    .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 21px; }
+    h1 { margin: 0; font: 700 clamp(25px, 3vw, 34px)/1.05 var(--display); }
+    .subtitle { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .host-id { color: var(--muted); text-align: right; font: 11px/1.8 var(--mono); }
+    .host-id strong { color: var(--ink); font-weight: 500; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+    .button {
+      min-height: 37px;
+      padding: 0 13px;
+      color: var(--ink);
+      border: 1px solid #cbd6ce;
+      border-radius: 4px;
+      background: #fff;
+      font: 600 12px var(--display);
+      transition: transform .12s ease, background .12s ease, border-color .12s ease;
+    }
+    .button:hover:not(:disabled) { transform: translateY(-1px); border-color: #849d8e; background: #f3f8f3; }
+    .button:active:not(:disabled) { transform: translateY(0); }
+    .button:disabled { cursor: not-allowed; opacity: .43; }
+    .button.primary { color: #fff; border-color: var(--green); background: var(--green); }
+    .button.primary:hover:not(:disabled) { border-color: #164b3b; background: #164b3b; }
+    .button.danger { color: #8d3327; border-color: #e1b8ae; background: #fff8f6; }
+    .button.quiet { border-color: transparent; background: transparent; }
+    .button.small { min-height: 29px; padding: 0 9px; font-size: 11px; }
+    .action-spacer { flex: 1; }
+    .session-state { align-self: center; padding: 0 5px; color: var(--muted); font: 10px var(--mono); }
+
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 15px; }
+    .metric { min-height: 103px; padding: 14px 15px 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+    .metric-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
+    .metric-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+    .metric-mark.amber { background: var(--amber); }
+    .metric-value { margin-top: 13px; font: 700 21px var(--display); }
+    .metric-note { margin-top: 4px; color: var(--muted); font: 10px var(--mono); }
+
+    .content-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .85fr); align-items: start; gap: 15px; }
+    .column { display: grid; min-width: 0; gap: 15px; }
+    .panel { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+    .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 49px; padding: 0 15px; border-bottom: 1px solid var(--line); }
+    .panel-heading h2 { margin: 0; font: 700 13px var(--display); }
+    .panel-kicker { color: var(--muted); font: 10px var(--mono); }
+    .panel-body { padding: 15px; }
+
+    .map-panel { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(210px, .85fr); min-height: 219px; }
+    .map-art {
+      position: relative;
+      min-height: 219px;
+      overflow: hidden;
+      background-color: #263c32;
+      background-image:
+        radial-gradient(ellipse at 51% 49%, transparent 0 8%, #80a08833 8.2% 8.7%, transparent 8.9% 16%, #80a08830 16.2% 16.7%, transparent 16.9% 25%, #80a0882c 25.2% 25.7%, transparent 25.9% 36%, #80a08828 36.2% 36.7%, transparent 36.9%),
+        repeating-linear-gradient(24deg, transparent 0 27px, #a8c3ad13 28px, transparent 29px 51px),
+        repeating-linear-gradient(112deg, transparent 0 42px, #a8c3ad12 43px, transparent 44px 68px);
+      border-right: 1px solid #d7e0d8;
+    }
+    .map-art::before, .map-art::after { position: absolute; content: ""; border: 1px solid #bad0bb42; border-radius: 50%; transform: rotate(-19deg); }
+    .map-art::before { width: 310px; height: 114px; left: -28px; top: 25px; }
+    .map-art::after { width: 248px; height: 86px; right: -42px; bottom: 20px; }
+    .map-route { position: absolute; left: 18%; top: 53%; width: 63%; height: 1px; background: #e8d381; transform: rotate(-23deg); box-shadow: 0 0 8px #e8d38180; }
+    .map-point { position: absolute; z-index: 1; width: 10px; height: 10px; border: 2px solid #f5e2a0; border-radius: 50%; background: #efaa54; box-shadow: 0 0 0 5px #efaa5430; }
+    .map-point.one { left: 28%; top: 63%; }
+    .map-point.two { right: 24%; top: 30%; background: var(--cyan); border-color: #d2fff3; box-shadow: 0 0 0 5px #58c8b830; }
+    .map-coord { position: absolute; z-index: 2; color: #c2d6c7; font: 9px var(--mono); }
+    .map-coord.top { top: 12px; left: 14px; }
+    .map-coord.bottom { right: 13px; bottom: 11px; }
+    .map-overlay { position: absolute; z-index: 2; left: 15px; bottom: 16px; color: white; }
+    .map-overlay span { display: block; color: #bdcfbf; font: 9px var(--mono); text-transform: uppercase; }
+    .map-overlay strong { display: block; margin-top: 3px; font: 700 18px var(--display); }
+    .map-info { display: flex; flex-direction: column; justify-content: space-between; padding: 17px; }
+    .map-info h3 { margin: 0; font: 700 19px var(--display); }
+    .map-info p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .map-detail { display: flex; justify-content: space-between; gap: 12px; padding-top: 9px; margin-top: 9px; border-top: 1px solid #e5ebe5; font-size: 11px; }
+    .map-detail span:first-child { color: var(--muted); }
+    .map-detail span:last-child { font-family: var(--mono); }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
+    th { padding: 10px 12px; color: var(--muted); border-bottom: 1px solid var(--line); font: 10px var(--mono); font-weight: 400; text-transform: uppercase; }
+    td { padding: 11px 12px; border-bottom: 1px solid #e8ede8; font-size: 12px; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .player-cell { display: flex; align-items: center; gap: 9px; font-weight: 700; }
+    .player-badge { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 4px; color: var(--green); background: var(--green-soft); font: 700 10px var(--mono); }
+    .host-pill { margin-left: 5px; padding: 3px 5px; border-radius: 3px; color: #335c3a; background: #e7f0dc; font: 9px var(--mono); }
+    .mono { color: #4e6056; font: 10px var(--mono); }
+    .empty { padding: 21px 12px; color: var(--muted); text-align: center; font-size: 12px; }
+
+    .queue-form { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(100px, .9fr) auto; gap: 7px; margin-bottom: 13px; }
+    select { width: 100%; min-width: 0; height: 36px; padding: 0 9px; color: var(--ink); border: 1px solid #cbd6ce; border-radius: 4px; background: #fff; font-size: 11px; }
+    .queue-list { display: grid; gap: 7px; padding: 0; margin: 0; list-style: none; }
+    .queue-item { display: grid; grid-template-columns: 27px 1fr auto; align-items: center; gap: 9px; padding: 8px; border: 1px solid #e0e7e0; border-radius: 4px; background: #fff; }
+    .queue-number { color: #8a988d; font: 10px var(--mono); }
+    .queue-map { font: 600 12px var(--display); }
+    .queue-mode { display: block; margin-top: 3px; color: var(--muted); font: 9px var(--mono); }
+    .queue-remove { width: 27px; height: 27px; color: #68776e; border: 0; border-radius: 4px; background: transparent; font: 17px var(--body); }
+    .queue-remove:hover { color: var(--red); background: #fff0ed; }
+    .queue-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 13px; }
+    .queue-footer span { color: var(--muted); font: 10px var(--mono); }
+
+    .event-list { display: grid; gap: 0; padding: 0; margin: 0; list-style: none; }
+    .event { display: grid; grid-template-columns: 48px 8px minmax(0, 1fr); align-items: start; gap: 9px; padding: 10px 0; border-bottom: 1px solid #e8ede8; }
+    .event:last-child { border-bottom: 0; }
+    .event-time { color: var(--muted); font: 9px var(--mono); padding-top: 2px; }
+    .event-dot { width: 7px; height: 7px; margin-top: 3px; border-radius: 50%; background: var(--green); }
+    .event-dot.amber { background: var(--amber); }
+    .event-dot.red { background: var(--red); }
+    .event-text { font-size: 11px; line-height: 1.45; }
+    .event-text strong { font-weight: 700; }
+    .feed-scroll { max-height: 235px; overflow: auto; }
+    .toast { position: fixed; right: 22px; bottom: 20px; z-index: 5; max-width: min(390px, calc(100vw - 40px)); padding: 12px 15px; color: white; border-radius: 5px; background: #183a2e; box-shadow: 0 8px 28px #10251f30; font-size: 12px; opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+    .toast.visible { opacity: 1; transform: translateY(0); }
+    .footer-note { display: flex; justify-content: space-between; gap: 12px; padding: 17px 2px 0; color: var(--muted); font: 9px var(--mono); }
+
+    @media (max-width: 1050px) {
+      .shell { grid-template-columns: 195px minmax(0, 1fr); }
+      .content-grid { grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .map-panel { grid-template-columns: 1fr; }
+      .map-art { min-height: 175px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .map-info { min-height: 170px; }
+    }
+    @media (max-width: 760px) {
+      .shell { display: block; }
+      .rail { position: relative; height: auto; padding: 12px 15px; }
+      .brand { padding: 0 4px 12px; }
+      .rail-label, .rail-bottom { display: none; }
+      .nav { display: flex; gap: 4px; overflow-x: auto; }
+      .nav a { min-height: 36px; padding: 0 9px; white-space: nowrap; }
+      .nav .nav-index { width: auto; margin-right: 7px; }
+      main { padding: 21px 15px 28px; }
+      .topbar { margin-bottom: 22px; }
+      .content-grid { grid-template-columns: 1fr; }
+      .page-heading { align-items: start; }
+      .host-id { font-size: 9px; }
+    }
+    @media (max-width: 470px) {
+      .page-heading { display: block; }
+      .host-id { margin-top: 10px; text-align: left; }
+      .metrics { gap: 7px; }
+      .metric { min-height: 93px; padding: 11px; }
+      .metric-value { font-size: 18px; }
+      .actions { padding: 9px; }
+      .action-spacer { display: none; }
+      .session-state { width: 100%; padding: 5px 2px 0; }
+      .queue-form { grid-template-columns: 1fr 1fr; }
+      .queue-form .button { grid-column: 1 / -1; }
+      .panel-heading, .panel-body { padding-left: 12px; padding-right: 12px; }
+      .footer-note { display: grid; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail" aria-label="Dashboard navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">RU</div>
+        <div><strong>READY UP</strong><span>HALO SERVER OPS</span></div>
+      </div>
+      <p class="rail-label">Server workspace</p>
+      <nav class="nav">
+        <a href="#overview" aria-current="page"><span class="nav-index">01</span>Overview</a>
+        <a href="#rotation"><span class="nav-index">02</span>Map rotation</a>
+        <a href="#players"><span class="nav-index">03</span>Players</a>
+        <a href="#activity"><span class="nav-index">04</span>Activity</a>
+      </nav>
+      <div class="rail-bottom">
+        <p>CONNECTION<br><strong>LOCAL DEMO</strong><br>Backend not attached</p>
+      </div>
+    </aside>
+
+    <main id="overview">
+      <div class="topbar">
+        <div class="crumb">Ready Up <span>/</span> <b>Server control</b></div>
+        <div class="demo-tag">DEMO DATA | NOT CONNECTED</div>
+      </div>
+
+      <header class="page-heading">
+        <div>
+          <h1>Server overview</h1>
+          <p class="subtitle">Halo: Combat Evolved | dedicated host</p>
+        </div>
+        <div class="host-id">HOST<br><strong>Ready Up</strong> &nbsp;|&nbsp; <strong>127.0.0.200</strong></div>
+      </header>
+
+      <section class="actions" aria-label="Server controls">
+        <button class="button primary" id="startMatch">Start match</button>
+        <button class="button" id="endMatch">End match</button>
+        <button class="button" id="restartMatch">Restart match</button>
+        <span class="action-spacer"></span>
+        <button class="button danger" id="serverToggle">Stop server</button>
+        <span class="session-state" id="actionState">LOBBY READY</span>
+      </section>
+
+      <section class="metrics" aria-label="Current server status">
+        <article class="metric">
+          <div class="metric-head">Server <span class="metric-mark" id="serverMark"></span></div>
+          <div class="metric-value" id="serverValue">Running</div>
+          <div class="metric-note" id="serverNote">Local preview</div>
+        </article>
+        <article class="metric">
+          <div class="metric-head">Match phase <span class="metric-mark amber" id="phaseMark"></span></div>
+          <div class="metric-value" id="phaseValue">Lobby</div>
+          <div class="metric-note">Team Slayer</div>
+        </article>
+        <article class="metric">
+          <div class="metric-head">Players <span class="metric-mark"></span></div>
+          <div class="metric-value"><span id="playerCount">1</span><span style="color:#9aa69d;font-size:14px"> / 16</span></div>
+          <div class="metric-note"><span id="machineCount">1</span> machine connected</div>
+        </article>
+        <article class="metric">
+          <div class="metric-head">Session uptime <span class="metric-mark"></span></div>
+          <div class="metric-value" id="uptime">00:12:48</div>
+          <div class="metric-note">Since host start</div>
+        </article>
+      </section>
+
+      <div class="content-grid">
+        <div class="column">
+          <section class="panel" aria-labelledby="current-map-title">
+            <div class="panel-heading">
+              <h2 id="current-map-title">Current map</h2>
+              <span class="panel-kicker" id="mapStatus">LOBBY</span>
+            </div>
+            <div class="map-panel">
+              <div class="map-art" role="img" aria-label="Stylized tactical map preview">
+                <span class="map-coord top">SECTOR 04 | TRAINING GROUNDS</span>
+                <span class="map-route"></span>
+                <span class="map-point one"></span><span class="map-point two"></span>
+                <div class="map-overlay"><span>Current rotation</span><strong id="mapArtName">Hang 'Em High</strong></div>
+                <span class="map-coord bottom">GRID 09 / 27</span>
+              </div>
+              <div class="map-info">
+                <div>
+                  <h3 id="mapName">Hang 'Em High</h3>
+                  <p id="mapDescription">Open sightlines | elevated routes</p>
+                </div>
+                <div>
+                  <div class="map-detail"><span>Game type</span><span id="gameType">Team Slayer</span></div>
+                  <div class="map-detail"><span>Netcode</span><span>Distributed</span></div>
+                  <div class="map-detail"><span>Server address</span><span>127.0.0.200</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="players" aria-labelledby="players-title">
+            <div class="panel-heading">
+              <h2 id="players-title">Connected players</h2>
+              <button class="button small" id="addPlayer">Add demo player</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Player</th><th>Machine</th><th>Controller</th><th>Team</th><th></th></tr></thead>
+                <tbody id="playersBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="column">
+          <section class="panel" id="rotation" aria-labelledby="rotation-title">
+            <div class="panel-heading">
+              <h2 id="rotation-title">Map rotation</h2>
+              <span class="panel-kicker" id="queueCount">1 QUEUED</span>
+            </div>
+            <div class="panel-body">
+              <form class="queue-form" id="queueForm">
+                <label class="visually-hidden" for="mapSelect">Map</label>
+                <select id="mapSelect">
+                  <option>Blood Gulch</option><option selected>Hang 'Em High</option><option>Battle Creek</option>
+                  <option>Beaver Creek</option><option>Boarding Action</option><option>Chill Out</option>
+                  <option>Derelict</option><option>Gephyrophobia</option><option>Longest</option>
+                  <option>Prisoner</option><option>Rat Race</option><option>Sidewinder</option>
+                  <option>Wizard</option><option>Putput</option>
+                </select>
+                <label class="visually-hidden" for="typeSelect">Game type</label>
+                <select id="typeSelect">
+                  <option>Slayer</option><option selected>Team Slayer</option><option>CTF</option>
+                  <option>Oddball</option><option>King</option><option>Race</option>
+                </select>
+                <button class="button primary" type="submit">Queue map</button>
+              </form>
+              <ol class="queue-list" id="queueList"></ol>
+              <div class="queue-footer">
+                <span>Next map applies on advance</span>
+                <button class="button small" id="advanceMap">Advance map</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="activity" aria-labelledby="activity-title">
+            <div class="panel-heading">
+              <h2 id="activity-title">Activity</h2>
+              <button class="button quiet small" id="clearActivity">Clear</button>
+            </div>
+            <div class="panel-body feed-scroll">
+              <ol class="event-list" id="eventList" aria-live="polite"></ol>
+            </div>
+          </section>
+        </div>
+      </div>
+      <footer class="footer-note"><span>READY UP | HALO DEDICATED SERVER</span><span>SIMULATED CONTROLS | NO COMMANDS SENT</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const state = {
+      serverRunning: true,
+      phase: "Lobby",
+      map: "Hang 'Em High",
+      gameType: "Team Slayer",
+      uptimeSeconds: 768,
+      players: [{ name: "Ready Up", machine: 0, controller: 0, team: "Red", host: true }],
+      queue: [{ map: "Blood Gulch", gameType: "Team Slayer" }],
+      events: [
+        { time: "19:46:33", text: "Host machine registered as <strong>Ready Up</strong>", tone: "" },
+        { time: "19:46:33", text: "Dedicated server entered the lobby", tone: "" },
+        { time: "19:46:32", text: "Loaded <strong>Hang 'Em High</strong> | Team Slayer", tone: "amber" }
+      ]
+    };
+    const mapDescriptions = {
+      "Blood Gulch": "Wide-open valley | vehicle routes",
+      "Hang 'Em High": "Open sightlines | elevated routes",
+      "Battle Creek": "Compact arena | close engagements",
+      "Beaver Creek": "Twin bases | central cave",
+      "Boarding Action": "Split platforms | long-range lanes",
+      "Chill Out": "Tight corridors | vertical paths",
+      "Derelict": "Circular layout | exposed center",
+      "Gephyrophobia": "Bridge crossing | vehicle combat",
+      "Longest": "Linear lanes | fast rotations",
+      "Prisoner": "Multi-level interior | tight routes",
+      "Rat Race": "Enclosed paths | close combat",
+      "Sidewinder": "Large terrain | vehicle routes",
+      "Wizard": "Compact arena | mirrored sides",
+      "Putput": "Open course | vehicle friendly"
+    };
+    const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    let toastTimer;
+
+    function notify(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("visible"), 2500);
+    }
+
+    function logEvent(message, tone = "") {
+      const now = new Date();
+      state.events.unshift({ time: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false },), text: escapeHtml(message), tone });
+      state.events = state.events.slice(0, 12);
+      renderEvents();
+    }
+
+    function renderEvents() {
+      const list = document.getElementById("eventList");
+      list.replaceChildren();
+      for (const event of state.events) {
+        const item = document.createElement("li");
+        item.className = "event";
+        const time = document.createElement("span");
+        time.className = "event-time";
+        time.textContent = event.time;
+        const dot = document.createElement("span");
+        dot.className = `event-dot ${event.tone || ""}`;
+        const text = document.createElement("span");
+        text.className = "event-text";
+        text.innerHTML = event.text;
+        item.append(time, dot, text);
+        list.append(item);
+      }
+    }
+
+    function renderPlayers() {
+      const body = document.getElementById("playersBody");
+      body.replaceChildren();
+      for (const [index, player] of state.players.entries()) {
+        const row = document.createElement("tr");
+        const playerCell = document.createElement("td");
+        const identity = document.createElement("div");
+        identity.className = "player-cell";
+        const badge = document.createElement("span");
+        badge.className = "player-badge";
+        badge.textContent = player.name.slice(0, 2).toUpperCase();
+        const name = document.createElement("span");
+        name.textContent = player.name;
+        identity.append(badge, name);
+        if (player.host) {
+          const host = document.createElement("span");
+          host.className = "host-pill";
+          host.textContent = "HOST";
+          identity.append(host);
+        }
+        playerCell.append(identity);
+        const cells = [playerCell, player.machine, player.controller, player.team];
+        for (const [cellIndex, value] of cells.entries()) {
+          const cell = cellIndex === 0 ? value : document.createElement("td");
+          if (cellIndex > 0) {
+            cell.className = "mono";
+            cell.textContent = value;
+          }
+          row.append(cell);
+        }
+        const action = document.createElement("td");
+        if (!player.host) {
+          const kick = document.createElement("button");
+          kick.className = "button small danger";
+          kick.type = "button";
+          kick.textContent = "Remove";
+          kick.setAttribute("aria-label", `Remove ${player.name}`);
+          kick.addEventListener("click", () => {
+            state.players.splice(index, 1);
+            logEvent(`${player.name} removed from the demo session`, "red");
+            notify("Demo player removed");
+            render();
+          });
+          action.append(kick);
+        }
+        row.append(action);
+        body.append(row);
+      }
+      document.getElementById("playerCount").textContent = state.players.length;
+      document.getElementById("machineCount").textContent = new Set(state.players.map(player => player.machine)).size;
+      if (!state.players.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.className = "empty";
+        cell.textContent = "No players connected";
+        row.append(cell);
+        body.append(row);
+      }
+    }
+
+    function renderQueue() {
+      const list = document.getElementById("queueList");
+      list.replaceChildren();
+      document.getElementById("queueCount").textContent = `${state.queue.length} QUEUED`;
+      state.queue.forEach((entry, index) => {
+        const item = document.createElement("li");
+        item.className = "queue-item";
+        const number = document.createElement("span");
+        number.className = "queue-number";
+        number.textContent = String(index + 1).padStart(2, "0");
+        const details = document.createElement("span");
+        const map = document.createElement("span");
+        map.className = "queue-map";
+        map.textContent = entry.map;
+        const mode = document.createElement("span");
+        mode.className = "queue-mode";
+        mode.textContent = entry.gameType;
+        details.append(map, mode);
+        const remove = document.createElement("button");
+        remove.className = "queue-remove";
+        remove.type = "button";
+        remove.textContent = "x";
+        remove.setAttribute("aria-label", `Remove ${entry.map} from queue`);
+        remove.addEventListener("click", () => {
+          state.queue.splice(index, 1);
+          logEvent(`${entry.map} removed from map queue`, "amber");
+          renderQueue();
+        });
+        item.append(number, details, remove);
+        list.append(item);
+      });
+      if (!state.queue.length) {
+        const empty = document.createElement("li");
+        empty.className = "empty";
+        empty.textContent = "Map queue is empty";
+        list.append(empty);
+      }
+      document.getElementById("advanceMap").disabled = !state.serverRunning || !state.queue.length;
+    }
+
+    function render() {
+      const serverValue = document.getElementById("serverValue");
+      const serverMark = document.getElementById("serverMark");
+      serverValue.textContent = state.serverRunning ? "Running" : "Stopped";
+      serverMark.style.background = state.serverRunning ? "var(--green)" : "var(--red)";
+      document.getElementById("serverNote").textContent = state.serverRunning ? "Local preview" : "No active session";
+      document.getElementById("phaseValue").textContent = state.serverRunning ? state.phase : "Offline";
+      document.getElementById("phaseMark").style.background = state.phase === "In Match" ? "var(--green)" : "var(--amber)";
+      document.getElementById("mapStatus").textContent = state.phase.toUpperCase();
+      document.getElementById("mapName").textContent = state.map;
+      document.getElementById("mapArtName").textContent = state.map;
+      document.getElementById("mapDescription").textContent = mapDescriptions[state.map] || "Multiplayer arena | custom rotation";
+      document.getElementById("gameType").textContent = state.gameType;
+      document.getElementById("actionState").textContent = !state.serverRunning ? "SERVER OFFLINE" : `${state.phase.toUpperCase()} READY`;
+      document.getElementById("serverToggle").textContent = state.serverRunning ? "Stop server" : "Start server";
+      document.getElementById("serverToggle").classList.toggle("primary", !state.serverRunning);
+      document.getElementById("startMatch").disabled = !state.serverRunning || state.phase === "In Match";
+      document.getElementById("endMatch").disabled = !state.serverRunning || state.phase !== "In Match";
+      document.getElementById("restartMatch").disabled = !state.serverRunning;
+      document.getElementById("queueForm").querySelector("button").disabled = !state.serverRunning;
+      document.getElementById("addPlayer").disabled = !state.serverRunning;
+      renderPlayers();
+      renderQueue();
+      renderEvents();
+    }
+
+    document.getElementById("startMatch").addEventListener("click", () => {
+      if (!state.serverRunning) return;
+      state.phase = "In Match";
+      logEvent(`Match started on ${state.map} | ${state.gameType}`);
+      notify("Demo match started");
+      render();
+    });
+    document.getElementById("endMatch").addEventListener("click", () => {
+      if (!state.serverRunning || state.phase !== "In Match") return;
+      state.phase = "Postgame";
+      logEvent("Match ended | server entered postgame", "amber");
+      notify("Demo match ended");
+      render();
+    });
+    document.getElementById("restartMatch").addEventListener("click", () => {
+      if (!state.serverRunning) return;
+      state.phase = "Lobby";
+      logEvent("Match reset | returned to lobby", "amber");
+      notify("Demo match reset");
+      render();
+    });
+    document.getElementById("serverToggle").addEventListener("click", event => {
+      state.serverRunning = !state.serverRunning;
+      state.phase = state.serverRunning ? "Lobby" : "Offline";
+      logEvent(state.serverRunning ? "Server started in demo mode" : "Server stopped in demo mode", state.serverRunning ? "" : "red");
+      notify(state.serverRunning ? "Demo server started" : "Demo server stopped");
+      render();
+    });
+    document.getElementById("queueForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const map = document.getElementById("mapSelect").value;
+      const gameType = document.getElementById("typeSelect").value;
+      state.queue.push({ map, gameType });
+      logEvent(`${map} queued | ${gameType}`);
+      notify(`${map} added to the demo queue`);
+      renderQueue();
+    });
+    document.getElementById("advanceMap").addEventListener("click", () => {
+      if (!state.serverRunning || !state.queue.length) return;
+      const next = state.queue.shift();
+      state.map = next.map;
+      state.gameType = next.gameType;
+      state.phase = "Lobby";
+      logEvent(`Advanced to ${next.map} | ${next.gameType}`, "amber");
+      notify(`Next map: ${next.map}`);
+      render();
+    });
+    document.getElementById("addPlayer").addEventListener("click", () => {
+      const machine = Math.max(0, ...state.players.map(player => player.machine)) + 1;
+      const names = ["Spartan-117", "Echo-216", "Wheezy", "Marathon"];
+      const usedNames = new Set(state.players.map(player => player.name));
+      const name = names.find(candidate => !usedNames.has(candidate)) || `Player ${machine + 1}`;
+      state.players.push({ name, machine, controller: 0, team: state.players.length % 2 ? "Blue" : "Red", host: false });
+      logEvent(`${name} joined machine ${machine}`);
+      notify(`${name} joined the demo session`);
+      renderPlayers();
+    });
+    document.getElementById("clearActivity").addEventListener("click", () => {
+      state.events = [];
+      renderEvents();
+    });
+
+    setInterval(() => {
+      if (!state.serverRunning) return;
+      state.uptimeSeconds++;
+      const hours = String(Math.floor(state.uptimeSeconds / 3600)).padStart(2, "0");
+      const minutes = String(Math.floor((state.uptimeSeconds % 3600) / 60)).padStart(2, "0");
+      const seconds = String(state.uptimeSeconds % 60).padStart(2, "0");
+      document.getElementById("uptime").textContent = `${hours}:${minutes}:${seconds}`;
+    }, 1000);
+
+    render();
+  </script>
+  <style>
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  </style>
+</body>
+</html>

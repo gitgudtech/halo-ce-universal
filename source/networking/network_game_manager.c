@@ -89,6 +89,9 @@ symbols in this file:
 #include "network_game_manager.h"
 #include "network_game_ui.h"
 #include "text/unicode.h"
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+int config_boolean(const char *name);
+#endif
 
 #include <xtl.h>
 
@@ -226,6 +229,15 @@ void network_game_generate_local_machine_name(
 {
 	char ascii_machine_name[32];
 	HANDLE find_handle;
+
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	if (config_boolean("debug.headless"))
+	{
+		ustrncpy(machine_name, L"Ready Up", 32);
+		machine_name[31] = 0;
+		return;
+	}
+#endif
 
 	/* port: a machine that brings one player to the game (the one who
 	joined multiplayer on it) is named after that player's profile, not the

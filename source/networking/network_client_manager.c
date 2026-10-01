@@ -1476,6 +1476,10 @@ boolean network_game_client_add_player(
 	player.controller_index = (char)local_player_index;
 	player.machine_index = (char)client->machine_index;
 	ustrncpy(player.name, profile.player_name, NETWORK_PLAYER_NAME_LENGTH - 1);
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	if (client->machine_index == 0 && local_player_index == 0)
+		ustrncpy(player.name, L"Ready Up", NETWORK_PLAYER_NAME_LENGTH - 1);
+#endif
 	player.name[NETWORK_PLAYER_NAME_LENGTH - 1] = 0;
 	player.primary_color_index = profile.primary_color_index;
 	player.icon_index = NONE;
@@ -1811,6 +1815,13 @@ void network_game_client_accepted_into_game(
 			message_packet->machine_index);
 
 		network_game_generate_local_machine_name(settings_request.machine_name);
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+		if (client->machine_index == 0)
+		{
+			ustrncpy(settings_request.machine_name, L"Ready Up", MAXIMUM_MACHINE_NAME_LENGTH - 1);
+			settings_request.machine_name[MAXIMUM_MACHINE_NAME_LENGTH - 1] = 0;
+		}
+#endif
 		settings_request.machine_index = (char)message_packet->machine_index;
 
 		message = create_network_game_message(

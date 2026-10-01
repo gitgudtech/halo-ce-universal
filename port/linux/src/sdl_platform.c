@@ -53,6 +53,8 @@ void updater_poll(SDL_Window *window);
 
 BOOL platform_sdl_initialize(void)
 {
+	Uint32 init_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS;
+
 	if (platform_sdl_started)
 		return TRUE;
 #if !defined(_WIN32) && !defined(HALO_ANDROID)
@@ -75,7 +77,11 @@ BOOL platform_sdl_initialize(void)
 	controller emulation in xinput_sdl.c) */
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
+#ifndef HALO_ANDROID
+	if (config_boolean("debug.headless"))
+		init_flags = SDL_INIT_EVENTS;
+#endif
+	if (!SDL_Init(init_flags))
 	{
 		platform_log("SDL_Init failed: %s", SDL_GetError());
 		return FALSE;
@@ -86,7 +92,8 @@ BOOL platform_sdl_initialize(void)
 	game's window opens */
 	platform_data_root();
 	/* (a new version looked for meanwhile, updater_poll asking about it) */
-	updater_start();
+	if (!config_boolean("debug.headless"))
+		updater_start();
 #endif
 	return TRUE;
 }

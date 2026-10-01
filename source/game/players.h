@@ -120,6 +120,10 @@ struct player_datum
 	byte pad_d2[2];
 };
 
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+extern boolean is_spectator;
+#endif
+
 struct players_globals
 {
 	long unknown0;

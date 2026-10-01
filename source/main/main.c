@@ -336,6 +336,9 @@ symbols in this file:
 #include "cseries/profile.h"
 #include "cseries/cseries_windows.h"
 #include "main.h"
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+int config_boolean(const char *name);
+#endif
 #include "real_math.h"
 #include "game.h"
 #include "game_engine.h"
@@ -3071,6 +3074,9 @@ void main_loop(
 {
 	boolean render_frame;
 	long connection;
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	boolean headless_mode;
+#endif
 
 	if (!game_in_editor())
 	{
@@ -3081,10 +3087,22 @@ void main_loop(
 	main_globals.want_to_be_at_main_menu = !game_in_editor();
 	main_globals.switch_to_structure_bsp_index = NONE;
 	main_globals.halt_time_scale = TRUE;
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	headless_mode = config_boolean("debug.headless");
+	if (headless_mode)
+	{
+		debug_no_drawing = TRUE;
+		global_frame_rate_throttle = TRUE;
+	}
+#endif
 
 	console_initialize();
 	debug_keys_initialize();
 	game_initialize();
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	if (headless_mode)
+		rasterizer_globals.framerate_throttle = FALSE;
+#endif
 	console_startup();
 	main_setup_connection();
 	main_initialize_time();
@@ -3179,9 +3197,16 @@ void main_loop(
 		}
 
 		profile_frame_start();
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+		if (!headless_mode)
+		{
+#endif
 		input_frame_begin();
 		input_update();
 		input_abstraction_update();
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+		}
+#endif
 		shell_idle();
 		event_manager_update();
 		telnet_console_process();
@@ -3284,7 +3309,7 @@ void main_loop(
 					profile_render_end();
 				}
 			}
-			else
+			else if (!debug_no_drawing)
 			{
 				profile_render_start();
 				main_pregame_render();
@@ -3299,7 +3324,10 @@ void main_loop(
 			}
 		}
 
-		input_frame_end();
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+		if (!headless_mode)
+#endif
+			input_frame_end();
 		profile_frame_end();
 		main_frame_rate_debug();
 

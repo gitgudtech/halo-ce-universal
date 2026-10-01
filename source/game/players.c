@@ -261,6 +261,9 @@ symbols in this file:
 #include "real_math.h"
 #include "render/render_debug.h"
 #include "players.h"
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+int config_boolean(const char *name);
+#endif
 #include "player_queues_new.h"
 #include "objects/objects.h"
 #include "saved games/game_state.h"
@@ -464,6 +467,9 @@ static short active_camo_screen_flash_fade_function = 0;
 static real active_camo_screen_flash_alpha = 0.f;
 static real active_camo_screen_flash_blue = 0.f;
 boolean debug_render_player_teleport = FALSE;
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+boolean is_spectator = FALSE;
+#endif
 static struct players_static_data players_static_data =
 {
 	{ "players_update_before_game", NONE, TRUE },
@@ -520,6 +526,9 @@ void players_initialize(
 		sizeof(players_globals->local_players));
 	players_globals->unknown0 = NONE;
 	players_globals->local_player_count = 0;
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	is_spectator = config_boolean("network.spectator");
+#endif
 
 	player_control_initialize();
 
@@ -1277,6 +1286,18 @@ static void player_spawn(
 	short starting_location_index;
 
 	player = player_get(player_index);
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+	if (is_spectator && player->local_player_index != NONE)
+	{
+		player->unit_index = NONE;
+		player->dead_unit_index = NONE;
+		player_control_new_unit(player->local_player_index, NONE);
+		player->action_result = _player_action_result_reload;
+		player->action_object_index = NONE;
+		observer_obsolete_position(player->local_player_index);
+		return;
+	}
+#endif
 	saved_unit_index = NONE;
 	if (!game_engine_running() && player->local_player_index != NONE)
 	{

@@ -48,6 +48,22 @@ symbols in this file:
 #include "bungie_net/network/transport_endpoint.h"
 #include "hs/hs.h"
 #include "networking/telnet_console.h"
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+#include "game/game_engine.h"
+#include "game/players.h"
+#include "interface/player_ui.h"
+#include "main/main.h"
+#include "memory/data.h"
+#include "networking/network_client_manager.h"
+#include "networking/network_game_globals.h"
+#include "networking/network_game_manager.h"
+#include "networking/network_server_manager.h"
+#include "networking/network_server_manager_internal.h"
+#include "text/unicode.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 
 /* ---------- constants */
 
@@ -95,6 +111,11 @@ static boolean process_telnet_client_buffer(
 	char *buffer,
 	long size,
 	struct telnet_client *client);
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+static boolean telnet_console_admin_command(
+	char const *command,
+	struct telnet_client *client);
+#endif
 
 /* ---------- globals */
 
@@ -367,6 +388,10 @@ static boolean process_telnet_client_buffer(
 					expression[TELNET_CLIENT_BUFFER_SIZE-1] = 0;
 					client->buffer[0] = 0;
 
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+					if (telnet_console_admin_command(expression, client))
+						continue;
+#endif
 					if (hs_compile_and_evaluate(expression))
 					{
 						telnet_client_write(client, "\r\n", 2);
@@ -402,3 +427,377 @@ static boolean process_telnet_client_buffer(
 
 	return client->endpoint!=NULL;
 }
+
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+static void telnet_console_admin_reply(
+	struct telnet_client *client,
+	char const *response)
+{
+	telnet_client_write(client, "\r\n", 2);
+	telnet_client_write(client, response, (long)csstrlen(response));
+	telnet_client_write(client, "\r\n", 2);
+}
+
+static char const *telnet_console_gametype_name(
+	struct game_variant const *variant)
+{
+	static char const *const names[] =
+	{
+		"race", "team_race", "rally", "slayer", "team_slayer", "elimination",
+		"stalker", "team_oddball", "accumulation", "oddball", "ctf", "ironctf",
+		"king", "team_king"
+	};
+	struct game_variant candidate;
+	struct game_variant current;
+	size_t index;
+
+	if (!variant)
+		return "unknown";
+	current = *variant;
+	csmemset(current.human_readable_game_description, 0,
+		sizeof(current.human_readable_game_description));
+	for (index = 0; index < NUMBEROF(names); index++)
+	{
+		game_engine_get_variant_by_name(&candidate, names[index]);
+		csmemset(candidate.human_readable_game_description, 0,
+			sizeof(candidate.human_readable_game_description));
+		if (!csmemcmp(&current, &candidate, sizeof(current)))
+			return names[index];
+	}
+	return "custom";
+}
+
+static boolean telnet_console_admin_command(
+	char const *command,
+	struct telnet_client *client)
+{
+	static char const *const map_aliases[] =
+	{
+		"beavercreek", "sidewinder", "damnation", "ratrace", "prisoner",
+		"hangemhigh", "chillout", "carousel", "boardingaction", "bloodgulch",
+		"wizard", "putput", "longest"
+	};
+	static char const *const game_types[] =
+	{
+		"race", "team_race", "rally", "slayer", "team_slayer", "elimination",
+		"stalker", "team_oddball", "accumulation", "oddball", "ctf", "ironctf",
+		"king", "team_king"
+	};
+	char response[512];
+	char map_alias[64];
+	char game_type_name[64];
+	char extra[2];
+	char const *map_name;
+	char const *map_path = NULL;
+	struct network_game_server *server = global_network_game_server_get();
+	struct network_game *game = server ? network_game_server_get_game(server) : NULL;
+	struct game_variant variant;
+	long player_index;
+	long written;
+	size_t index;
+	int argument_count;
+
+	map_name = game ? game->map.name : main_get_multiplayer_map_name();
+	if (game)
+		variant = game->variant;
+	else if (!player_ui_game_variant_specified(&variant))
+		variant = *game_engine_get_variant();
+
+	if (!strcmp(command, "status"))
+	{
+		char const *phase = !server ? "offline" :
+			network_game_server_is_pregame(server) ? "lobby" :
+			network_game_server_is_ingame(server) ? "in-game" :
+			network_game_server_is_postgame(server) ? "postgame" : "unknown";
+		snprintf(response, sizeof(response), "OK status=%s map=%s gametype=%s players=%d machines=%d",
+			phase, map_name ? map_name : "unknown", telnet_console_gametype_name(&variant),
+			network_game_server_get_player_count(server), network_game_server_get_machine_count(server));
+		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strcmp(command, "currentmap"))
+	{
+		char const *alias = map_name ? strrchr(map_name, '\\') : NULL;
+		snprintf(response, sizeof(response), "OK currentmap=%s gametype=%s",
+			alias ? alias + 1 : (map_name ? map_name : "unknown"),
+			telnet_console_gametype_name(&variant));
+		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strcmp(command, "players"))
+	{
+		struct data_iterator iterator;
+		struct player_datum *player;
+		long count = 0;
+
+		telnet_console_admin_reply(client, "OK players");
+		data_iterator_new(&iterator, player_data);
+		while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+		{
+			char name[64];
+			if (player->network_player_data.name[0])
+				wide_to_ascii(player->network_player_data.name, name, sizeof(name));
+			else
+				wide_to_ascii(player->name, name, sizeof(name));
+			if (!name[0])
+				csstrcpy(name, "<unnamed>");
+			snprintf(response, sizeof(response),
+				"player id=%ld name=%s machine=%d controller=%d team=%d biped=%s",
+				iterator.datum_index, name, player->network_player_data.machine_index,
+				player->network_player_data.controller_index, player->team_index,
+				player->unit_index == NONE ? "no" : "yes");
+			telnet_console_admin_reply(client, response);
+			count++;
+		}
+		if (!count)
+			telnet_console_admin_reply(client, "players=0");
+		return TRUE;
+	}
+	if (!strncmp(command, "kick", 4) && (!command[4] || command[4] == ' ' || command[4] == '\t'))
+	{
+		char *end;
+		short machine_index;
+		command += 4;
+		while (*command == ' ' || *command == '\t')
+			command++;
+		player_index = strtol(command, &end, 10);
+		while (*end == ' ' || *end == '\t')
+			end++;
+		if (!*command || end == command || *end || player_index == NONE)
+		{
+			telnet_console_admin_reply(client, "ERR usage: kick <player-id>");
+			return TRUE;
+		}
+		{
+			struct player_datum *player = player_try_and_get(player_index);
+			if (!player)
+			{
+				telnet_console_admin_reply(client, "ERR player id not found");
+				return TRUE;
+			}
+			machine_index = player->network_player_data.machine_index;
+		}
+		if (!server || machine_index == 0)
+		{
+			telnet_console_admin_reply(client, "ERR cannot kick the host or no hosted game");
+			return TRUE;
+		}
+		network_game_server_kick_machine(machine_index);
+		snprintf(response, sizeof(response), "OK disconnect scheduled for machine=%d", machine_index);
+		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strcmp(command, "gametype"))
+	{
+		snprintf(response, sizeof(response), "OK gametype=%s", telnet_console_gametype_name(&variant));
+		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strncmp(command, "gametype ", 9))
+	{
+		game_type_name[0] = 0;
+		extra[0] = 0;
+		argument_count = sscanf(command + 9, "%63s %1s", game_type_name, extra);
+		if (argument_count != 1)
+		{
+			telnet_console_admin_reply(client, "ERR usage: gametype <name>");
+			return TRUE;
+		}
+		for (index = 0; game_type_name[index]; index++)
+			game_type_name[index] = (char)tolower((unsigned char)game_type_name[index]);
+		if (index >= NUMBEROF(game_types))
+		{
+			for (index = 0; index < NUMBEROF(game_types); index++)
+			{
+				if (!strcmp(game_type_name, game_types[index]))
+					break;
+			}
+		}
+		else
+		{
+			for (index = 0; index < NUMBEROF(game_types); index++)
+			{
+				if (!strcmp(game_type_name, game_types[index]))
+					break;
+			}
+		}
+		if (index == NUMBEROF(game_types))
+		{
+			telnet_console_admin_reply(client, "ERR unknown gametype");
+			return TRUE;
+		}
+		game_engine_get_variant_by_name(&variant, game_type_name);
+		if (server && !network_game_server_is_pregame(server))
+		{
+			if (!network_game_server_admin_queue_map(server, map_name, &variant, FALSE))
+				telnet_console_admin_reply(client, "ERR map queue is full");
+			else
+				telnet_console_admin_reply(client, "OK gametype queued for next transition");
+			return TRUE;
+		}
+		player_ui_set_game_variant(&variant);
+		game_engine_override_game_variant(&variant);
+		if (server)
+			network_game_server_change_game_variant(server, &variant);
+		telnet_console_admin_reply(client, "OK gametype updated");
+		return TRUE;
+	}
+	if (!strcmp(command, "start"))
+	{
+		if (!server || !network_game_server_is_pregame(server))
+			telnet_console_admin_reply(client, "ERR start requires a hosted lobby");
+		else
+		{
+			network_game_client_request_immediate_start();
+			telnet_console_admin_reply(client, "OK match start requested");
+		}
+		return TRUE;
+	}
+	if (!strcmp(command, "end"))
+	{
+		if (!server || !network_game_server_is_ingame(server))
+			telnet_console_admin_reply(client, "ERR end requires an active match");
+		else
+		{
+			game_engine_switch_to_postgame();
+			telnet_console_admin_reply(client, "OK match end requested");
+		}
+		return TRUE;
+	}
+	if (!strcmp(command, "restart"))
+	{
+		if (!server)
+			telnet_console_admin_reply(client, "ERR restart requires a hosted game");
+		else if (network_game_server_is_ingame(server))
+		{
+			game_engine_switch_to_postgame();
+			telnet_console_admin_reply(client, "OK restart requested after postgame");
+		}
+		else if (network_game_server_is_postgame(server))
+			telnet_console_admin_reply(client, network_game_server_reset_to_pregame(server) ?
+				"OK returned to lobby" : "ERR could not return to lobby");
+		else
+			telnet_console_admin_reply(client, "ERR restart requires an active or postgame match");
+		return TRUE;
+	}
+	if (!strcmp(command, "mapqueue"))
+	{
+		long queue_count = network_game_server_admin_map_queue_count();
+		if (!queue_count)
+			telnet_console_admin_reply(client, "OK mapqueue empty");
+		for (index = 0; index < (size_t)queue_count; index++)
+		{
+			char queued_path[sizeof(((struct network_game *)0)->map.name)];
+			struct game_variant queued_variant;
+			char const *alias;
+			if (!network_game_server_admin_map_queue_get((long)index, queued_path,
+				sizeof(queued_path), &queued_variant))
+				continue;
+			alias = strrchr(queued_path, '\\');
+			snprintf(response, sizeof(response), "OK mapqueue[%ld]=%s gametype=%s",
+				index + 1, alias ? alias + 1 : queued_path, telnet_console_gametype_name(&queued_variant));
+			telnet_console_admin_reply(client, response);
+		}
+		return TRUE;
+	}
+	if (!strcmp(command, "nextmap"))
+	{
+		if (!network_game_server_admin_next_map(server))
+			telnet_console_admin_reply(client, "ERR map queue empty or server cannot transition");
+		else
+			telnet_console_admin_reply(client, "OK map transition requested");
+		return TRUE;
+	}
+	if (!strncmp(command, "map ", 4) || !strncmp(command, "queuemap ", 9))
+	{
+		boolean queue_only = !strncmp(command, "queuemap ", 9);
+		char const *arguments = command + (queue_only ? 9 : 4);
+		struct game_variant queued_variant;
+		boolean has_variant = FALSE;
+		if (sscanf(arguments, "%63s %63s %1s", map_alias, game_type_name, extra) > 2)
+		{
+			telnet_console_admin_reply(client, "ERR usage: map <alias> [gametype]");
+			return TRUE;
+		}
+		argument_count = sscanf(arguments, "%63s %63s", map_alias, game_type_name);
+		if (argument_count < 1)
+		{
+			telnet_console_admin_reply(client, "ERR usage: map <alias> [gametype]");
+			return TRUE;
+		}
+		for (index = 0; index < NUMBEROF(map_aliases); index++)
+		{
+			if (!_stricmp(map_alias, map_aliases[index]))
+			{
+				static char const *const paths[] =
+				{
+					"levels\\test\\beavercreek\\beavercreek", "levels\\test\\sidewinder\\sidewinder",
+					"levels\\test\\damnation\\damnation", "levels\\test\\ratrace\\ratrace",
+					"levels\\test\\prisoner\\prisoner", "levels\\test\\hangemhigh\\hangemhigh",
+					"levels\\test\\chillout\\chillout", "levels\\test\\carousel\\carousel",
+					"levels\\test\\boardingaction\\boardingaction", "levels\\test\\bloodgulch\\bloodgulch",
+					"levels\\test\\wizard\\wizard", "levels\\test\\putput\\putput",
+					"levels\\test\\longest\\longest"
+				};
+				map_path = paths[index];
+				break;
+			}
+		}
+		if (!map_path)
+		{
+			telnet_console_admin_reply(client, "ERR unknown multiplayer map");
+			return TRUE;
+		}
+		if (argument_count == 2)
+		{
+			for (index = 0; game_type_name[index]; index++)
+				game_type_name[index] = (char)tolower((unsigned char)game_type_name[index]);
+			game_engine_get_variant_by_name(&queued_variant, game_type_name);
+			if (!queued_variant.flags)
+			{
+				telnet_console_admin_reply(client, "ERR unknown gametype");
+				return TRUE;
+			}
+			has_variant = TRUE;
+		}
+		if (queue_only || (server && !network_game_server_is_pregame(server)))
+		{
+			if (!server || !network_game_server_admin_queue_map(server, map_path,
+				has_variant ? &queued_variant : NULL, !queue_only))
+				telnet_console_admin_reply(client, "ERR map queue unavailable or full");
+			else if (!queue_only && !network_game_server_admin_next_map(server))
+				telnet_console_admin_reply(client, "ERR map transition failed");
+			else
+				telnet_console_admin_reply(client, queue_only ? "OK map queued" : "OK map transition requested");
+			return TRUE;
+		}
+		main_set_multiplayer_map_name(map_path);
+		game_engine_override_map_name(map_path);
+		if (has_variant)
+		{
+			player_ui_set_game_variant(&queued_variant);
+			game_engine_override_game_variant(&queued_variant);
+		}
+		if (server)
+		{
+			network_game_server_change_map_name(server, map_path);
+			if (has_variant)
+				network_game_server_change_game_variant(server, &queued_variant);
+		}
+		telnet_console_admin_reply(client, "OK map set");
+		return TRUE;
+	}
+	if (!strcmp(command, "listmaps"))
+	{
+		csstrcpy(response, "OK maps: beavercreek, sidewinder, damnation, ratrace, prisoner, hangemhigh, chillout, carousel, boardingaction, bloodgulch, wizard, putput, longest");
+		telnet_console_admin_reply(client, response);
+		return TRUE;
+	}
+	if (!strcmp(command, "say") || !strncmp(command, "say ", 4))
+	{
+		telnet_console_admin_reply(client, "ERR server-wide chat is not implemented");
+		return TRUE;
+	}
+	return FALSE;
+}
+#endif

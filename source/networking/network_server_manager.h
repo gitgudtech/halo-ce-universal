@@ -68,6 +68,34 @@ void network_game_server_change_map_name(
 void network_game_server_change_game_variant(
 	struct network_game_server *server,
 	struct game_variant *variant);
+boolean network_game_server_admin_queue_map(
+	struct network_game_server *server,
+	char const *map_name,
+	struct game_variant const *variant,
+	boolean front);
+long network_game_server_admin_map_queue_count(
+	void);
+boolean network_game_server_admin_map_queue_get(
+	long index,
+	char *map_name,
+	long map_name_size,
+	struct game_variant *variant);
+boolean network_game_server_admin_next_map(
+	struct network_game_server *server);
+boolean network_game_server_is_pregame(
+	struct network_game_server *server);
+boolean network_game_server_is_ingame(
+	struct network_game_server *server);
+boolean network_game_server_is_postgame(
+	struct network_game_server *server);
+char const *network_game_server_get_map_name(
+	struct network_game_server *server);
+struct game_variant *network_game_server_get_game_variant(
+	struct network_game_server *server);
+short network_game_server_get_player_count(
+	struct network_game_server *server);
+short network_game_server_get_machine_count(
+	struct network_game_server *server);
 
 /* ---------- globals */
 

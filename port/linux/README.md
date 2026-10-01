@@ -324,6 +324,32 @@ Each machine uses its own loopback address, from 127.0.0.2. The option
 `--start` starts the game when all the machines are in the lobby. If the
 host has no `network.address`, do not give `--host`.
 
+## Headless host and admin commands
+
+On Windows or Linux, run a host without a video window or local biped with
+`--headless --spectator`. For a LAN-only Prisoner/Slayer test host:
+
+```sh
+HALO_NETWORK_TEST=host:prisoner:slayer \
+HALO_NETWORK_TEST_START=3600 \
+HALO_NET_ONLINE=false \
+./dist/halo-linux-debug/halo --headless --spectator
+```
+
+For Internet play, set `HALO_NET_ONLINE=true`. A fixed UDP tunnel port can be
+selected with `HALO_NET_TUNNEL_PORT`; forward that UDP port on the router if
+hole punching does not work. The game writes a fresh invite link at startup.
+
+The native Telnet console is disabled by default. Enable it with
+`HALO_TELNET_CONSOLE=true`; it listens on loopback at port 2323 by default
+(`HALO_TELNET_CONSOLE_PORT` changes the port). It has no password, so do not
+forward it or bind it to a public interface. Commands include:
+
+- `status`, `currentmap`, `gametype`, `players`, `listmaps`
+- `map <alias> [gametype]`, `queuemap <alias> [gametype]`, `mapqueue`, `nextmap`
+- `start`, `end`, `restart`, `kick <player-id>`
+- `say` is not supported by the current System Link protocol.
+
 ## Internet play
 
 Machines with an invite link can play system link on the internet. This

@@ -3,6 +3,8 @@ NETWORK_SERVER_MANAGER.C
 
 symbols in this file:
 0011B5D0 0030:
+		admin_map_queue_count = 0;
+		csmemset(admin_map_queue, 0, sizeof(admin_map_queue));
 	_countdown_timer_update (0000)
 0011B600 0060:
 	_countdown_timer_get_time_remaining (0000)
@@ -455,6 +457,8 @@ symbols in this file:
 #include "game/game_engine.h"
 #include "game/player_queues_new.h"
 #include "game/players.h"
+#include "memory/data.h"
+#include "interface/player_ui.h"
 #include "interface/ui_widget.h"
 #include "main/main.h"
 #include "math/real_math.h"
@@ -524,6 +528,7 @@ enum
 	NETWORK_GAME_SERVER_CLIENT_TIMEOUT = 15 * MILLISECONDS_PER_SECOND,
 	/* a machine joining the game in progress, silent while it loads */
 	NETWORK_GAME_SERVER_LATE_JOINER_TIMEOUT = 120 * MILLISECONDS_PER_SECOND,
+	MAXIMUM_ADMIN_MAP_QUEUE = 16,
 };
 
 enum
@@ -678,6 +683,12 @@ struct network_game_server
 	long waiting_player_count;
 };
 
+struct network_game_server_admin_map_entry
+{
+	char map_name[NETWORK_GAME_MAP_NAME_LENGTH];
+	struct game_variant variant;
+};
+
 /* the layout follows the session limits (port/linux/include/halo_port_limits.h) */
 typedef char network_game_players_offset_assert[
 	offsetof(struct network_game, players) == HALO_PORT_NETWORK_GAME_PLAYERS_OFFSET ? 1 : -1];
@@ -754,11 +765,15 @@ static void network_game_server_countdown_started(
 	struct network_game_server *server);
 static void network_game_server_remove_players_gone_while_loading(
 	struct network_game_server *server);
+static boolean network_game_server_apply_admin_map_queue(
+	struct network_game_server *server);
 
 /* ---------- globals */
 
 struct network_game_server network_game_server_memory_do_not_use_directly;
 boolean network_game_server_memory_do_not_use_directly_in_use = FALSE;
+static struct network_game_server_admin_map_entry admin_map_queue[MAXIMUM_ADMIN_MAP_QUEUE];
+static long admin_map_queue_count;
 
 /* port: the players in the settings the game started with: every machine
 spawned them, and those whose machines left while the game loaded (whom no
@@ -2177,6 +2192,13 @@ boolean network_game_server_add_player_to_game(
 		}
 
 		/* (the name comes from the wire) */
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+		if (player->machine_index == 0 && player->controller_index == 0)
+		{
+			ustrncpy(player->name, L"Ready Up", NETWORK_PLAYER_NAME_LENGTH - 1);
+			player->name[NETWORK_PLAYER_NAME_LENGTH - 1] = 0;
+		}
+#endif
 		player->name[NETWORK_PLAYER_NAME_LENGTH - 1] = 0;
 		if (!player->name[0])
 			get_unique_random_name(server, player);
@@ -2193,6 +2215,27 @@ boolean network_game_server_add_player_to_game(
 		success = network_game_add_player(&server->game, player);
 		if (success == TRUE)
 		{
+#if defined(__linux__) || defined(HALO_NATIVE_DESKTOP)
+			if (player->machine_index == 0 && player->controller_index == 0)
+			{
+				struct data_iterator iterator;
+				struct player_datum *datum;
+
+				data_iterator_new(&iterator, player_data);
+				while ((datum = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+				{
+					if (datum->network_player_data.machine_index == 0 &&
+						datum->network_player_data.controller_index == 0)
+					{
+						ustrncpy(datum->name, L"Ready Up", 11);
+						datum->name[11] = 0;
+						ustrncpy(datum->network_player_data.name, L"Ready Up", 11);
+						datum->network_player_data.name[11] = 0;
+						break;
+					}
+				}
+			}
+#endif
 			network_event(
 				"server added player from machine #%d at controller index #%d to the game",
 				player->machine_index,
@@ -3097,6 +3140,149 @@ void network_game_server_change_game_variant(
 	}
 
 	return;
+}
+
+static boolean network_game_server_apply_admin_map_queue(
+	struct network_game_server *server)
+{
+	struct network_game_server_admin_map_entry *entry;
+	long client_machine_index;
+
+	if (!server || admin_map_queue_count <= 0)
+		return FALSE;
+	entry = &admin_map_queue[0];
+	csstrncpy(server->game.map.name, entry->map_name, sizeof(server->game.map.name) - 1);
+	server->game.map.name[sizeof(server->game.map.name) - 1] = 0;
+	csmemcpy(&server->game.variant, &entry->variant, sizeof(server->game.variant));
+	main_set_multiplayer_map_name(entry->map_name);
+	game_engine_override_map_name(entry->map_name);
+	game_engine_override_game_variant(&entry->variant);
+	player_ui_set_game_variant(&entry->variant);
+	for (client_machine_index = 0; client_machine_index < MAXIMUM_NETWORK_MACHINE_COUNT; client_machine_index++)
+	{
+		SET_FLAG(server->client_machines[client_machine_index].flags,
+			_network_client_machine_precached_bit, FALSE);
+	}
+	network_event("admin map queue applied %s", entry->map_name);
+	admin_map_queue_count--;
+	if (admin_map_queue_count > 0)
+		csmemmove(admin_map_queue, admin_map_queue + 1,
+			admin_map_queue_count * sizeof(admin_map_queue[0]));
+	return TRUE;
+}
+
+boolean network_game_server_admin_queue_map(
+	struct network_game_server *server,
+	char const *map_name,
+	struct game_variant const *variant,
+	boolean front)
+{
+	long index;
+
+	if (!server || !map_name || !map_name[0] || admin_map_queue_count >= MAXIMUM_ADMIN_MAP_QUEUE)
+		return FALSE;
+	if (front)
+	{
+		csmemmove(admin_map_queue + 1, admin_map_queue,
+			admin_map_queue_count * sizeof(admin_map_queue[0]));
+		index = 0;
+	}
+	else
+	{
+		index = admin_map_queue_count;
+	}
+	csstrncpy(admin_map_queue[index].map_name, map_name, sizeof(admin_map_queue[index].map_name) - 1);
+	admin_map_queue[index].map_name[sizeof(admin_map_queue[index].map_name) - 1] = 0;
+	csmemcpy(&admin_map_queue[index].variant,
+		variant ? variant : &server->game.variant,
+		sizeof(admin_map_queue[index].variant));
+	admin_map_queue_count++;
+	return TRUE;
+}
+
+long network_game_server_admin_map_queue_count(
+	void)
+{
+	return admin_map_queue_count;
+}
+
+boolean network_game_server_admin_map_queue_get(
+	long index,
+	char *map_name,
+	long map_name_size,
+	struct game_variant *variant)
+{
+	if (index < 0 || index >= admin_map_queue_count || !map_name || map_name_size <= 0)
+		return FALSE;
+	csstrncpy(map_name, admin_map_queue[index].map_name, map_name_size - 1);
+	map_name[map_name_size - 1] = 0;
+	if (variant)
+		csmemcpy(variant, &admin_map_queue[index].variant, sizeof(*variant));
+	return TRUE;
+}
+
+boolean network_game_server_admin_next_map(
+	struct network_game_server *server)
+{
+	if (!server || admin_map_queue_count <= 0)
+		return FALSE;
+	if (server->state == _network_game_server_state_ingame)
+	{
+		network_game_server_switch_to_postgame(server);
+		return TRUE;
+	}
+	if (server->state == _network_game_server_state_postgame)
+		return network_game_server_reset_to_pregame(server);
+	if (server->state != _network_game_server_state_pregame ||
+		!network_game_server_apply_admin_map_queue(server))
+	{
+		return FALSE;
+	}
+	network_game_server_change_map_name(server, server->game.map.name);
+	network_game_server_change_game_variant(server, &server->game.variant);
+	return TRUE;
+}
+
+boolean network_game_server_is_pregame(
+	struct network_game_server *server)
+{
+	return server && server->state == _network_game_server_state_pregame;
+}
+
+boolean network_game_server_is_ingame(
+	struct network_game_server *server)
+{
+	return server && server->state == _network_game_server_state_ingame;
+}
+
+boolean network_game_server_is_postgame(
+	struct network_game_server *server)
+{
+	return server && server->state == _network_game_server_state_postgame;
+}
+
+char const *network_game_server_get_map_name(
+	struct network_game_server *server)
+{
+	return server ? server->game.map.name : NULL;
+}
+
+struct game_variant *network_game_server_get_game_variant(
+	struct network_game_server *server)
+{
+	return server ? &server->game.variant : NULL;
+}
+
+short network_game_server_get_player_count(
+	struct network_game_server *server)
+{
+	return server ? server->game.player_count : 0;
+}
+
+short network_game_server_get_machine_count(
+	struct network_game_server *server)
+{
+	return server ? server->game.machine_count : 0;
 }
 
 boolean network_game_server_remove_client_machine_from_game(
@@ -4431,6 +4617,7 @@ boolean network_game_server_reset_to_pregame(
 			network_game_reset_for_next_round(&server->game, FALSE);
 			if (network_game_server_setup_game_from_playlist(server))
 			{
+				network_game_server_apply_admin_map_queue(server);
 				/* the settings record goes out in pieces */
 				/* (the pregame whatever a machine missed: the machines are in it,
 				and the pregame's flush sends the settings again) */
