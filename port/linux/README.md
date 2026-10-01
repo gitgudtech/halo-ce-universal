@@ -183,6 +183,20 @@ the setting for one start of the game. It has priority over the file.
 | `debug.network_latency`, `debug.network_loss` | `0` | `HALO_NETWORK_LATENCY`, `HALO_NETWORK_LOSS` | The game holds all the data that it receives for this number of milliseconds, and ignores this percentage of the datagrams. Use these settings to test the netcode as on the internet. |
 | `debug.telnet_console`, `debug.telnet_console_port` | `false`, `2323` | `HALO_TELNET_CONSOLE`, `HALO_TELNET_CONSOLE_PORT` | The game listens on 127.0.0.1, on this port, for a script console (connect with telnet). The console has no password, so only this computer can reach it. |
 
+### Live server dashboard
+
+The Ready Up dashboard runs on the administrator's computer and reaches the
+host through SSH. Start the host with `HALO_TELNET_CONSOLE=true` (port 2323 by
+default), then run this from the repository root on a computer with SSH access:
+
+```sh
+python tools/server_dashboard_server.py --ssh-target user@host
+```
+
+Open `http://127.0.0.1:8765/`. The bridge binds only to loopback, opens an SSH
+tunnel to the host's loopback Telnet console, and accepts only the dashboard's
+admin commands. Do not expose or forward the Telnet port.
+
 With Mesa drivers, the game sends its GL calls through the GL thread of
 Mesa. To stop this, set the environment variable `mesa_glthread=false`.
 

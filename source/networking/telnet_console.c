@@ -526,26 +526,44 @@ static boolean telnet_console_admin_command(
 	}
 	if (!strcmp(command, "players"))
 	{
-		struct data_iterator iterator;
-		struct player_datum *player;
+		long player_index;
 		long count = 0;
 
-		telnet_console_admin_reply(client, "OK players");
-		data_iterator_new(&iterator, player_data);
-		while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+		if (!game)
 		{
+			telnet_console_admin_reply(client, "ERR no hosted game");
+			return TRUE;
+		}
+		telnet_console_admin_reply(client, "OK players");
+		for (player_index = 0; player_index < NUMBEROF(game->players); player_index++)
+		{
+			struct network_player *player = &game->players[player_index];
 			char name[64];
-			if (player->network_player_data.name[0])
-				wide_to_ascii(player->network_player_data.name, name, sizeof(name));
-			else
-				wide_to_ascii(player->name, name, sizeof(name));
+			long datum_index;
+			boolean has_biped = FALSE;
+			struct data_iterator iterator;
+			struct player_datum *datum;
+
+			if (!network_player_is_valid(player))
+				continue;
+			wide_to_ascii(player->name, name, sizeof(name));
 			if (!name[0])
 				csstrcpy(name, "<unnamed>");
+			data_iterator_new(&iterator, player_data);
+			while ((datum = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
+			{
+				if (datum->network_player_data.machine_index == player->machine_index &&
+					datum->network_player_data.controller_index == player->controller_index)
+				{
+					has_biped = datum->unit_index != NONE;
+					break;
+				}
+			}
 			snprintf(response, sizeof(response),
 				"player id=%ld name=%s machine=%d controller=%d team=%d biped=%s",
-				iterator.datum_index, name, player->network_player_data.machine_index,
-				player->network_player_data.controller_index, player->team_index,
-				player->unit_index == NONE ? "no" : "yes");
+				player_index, name, player->machine_index,
+				player->controller_index, player->team_index,
+				has_biped ? "yes" : "no");
 			telnet_console_admin_reply(client, response);
 			count++;
 		}
@@ -569,13 +587,14 @@ static boolean telnet_console_admin_command(
 			return TRUE;
 		}
 		{
-			struct player_datum *player = player_try_and_get(player_index);
-			if (!player)
+			struct network_game *game = server ? network_game_server_get_game(server) : NULL;
+			if (!game || player_index < 0 || player_index >= NUMBEROF(game->players) ||
+				!network_player_is_valid(&game->players[player_index]))
 			{
 				telnet_console_admin_reply(client, "ERR player id not found");
 				return TRUE;
 			}
-			machine_index = player->network_player_data.machine_index;
+			machine_index = game->players[player_index].machine_index;
 		}
 		if (!server || machine_index == 0)
 		{

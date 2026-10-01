@@ -275,14 +275,14 @@
         <a href="#activity"><span class="nav-index">04</span>Activity</a>
       </nav>
       <div class="rail-bottom">
-        <p>CONNECTION<br><strong>LOCAL DEMO</strong><br>Backend not attached</p>
+        <p>CONNECTION<br><strong id="connectionDetail">LOCAL SSH BRIDGE</strong></p>
       </div>
     </aside>
 
     <main id="overview">
       <div class="topbar">
         <div class="crumb">Ready Up <span>/</span> <b>Server control</b></div>
-        <div class="demo-tag">DEMO DATA | NOT CONNECTED</div>
+        <div class="demo-tag" id="connectionBadge">CONNECTING TO HOST</div>
       </div>
 
       <header class="page-heading">
@@ -290,7 +290,7 @@
           <h1>Server overview</h1>
           <p class="subtitle">Halo: Combat Evolved | dedicated host</p>
         </div>
-        <div class="host-id">HOST<br><strong>Ready Up</strong> &nbsp;|&nbsp; <strong>127.0.0.200</strong></div>
+        <div class="host-id">HOST<br><strong>Ready Up</strong> &nbsp;|&nbsp; <strong id="serverAddress">--</strong></div>
       </header>
 
       <section class="actions" aria-label="Server controls">
@@ -298,7 +298,7 @@
         <button class="button" id="endMatch">End match</button>
         <button class="button" id="restartMatch">Restart match</button>
         <span class="action-spacer"></span>
-        <button class="button danger" id="serverToggle">Stop server</button>
+        <button class="button" id="refreshStatus">Refresh status</button>
         <span class="session-state" id="actionState">LOBBY READY</span>
       </section>
 
@@ -311,17 +311,17 @@
         <article class="metric">
           <div class="metric-head">Match phase <span class="metric-mark amber" id="phaseMark"></span></div>
           <div class="metric-value" id="phaseValue">Lobby</div>
-          <div class="metric-note">Team Slayer</div>
+          <div class="metric-note" id="phaseNote">Waiting for host</div>
         </article>
         <article class="metric">
           <div class="metric-head">Players <span class="metric-mark"></span></div>
-          <div class="metric-value"><span id="playerCount">1</span><span style="color:#9aa69d;font-size:14px"> / 16</span></div>
+          <div class="metric-value"><span id="playerCount">0</span><span style="color:#9aa69d;font-size:14px"> / 128</span></div>
           <div class="metric-note"><span id="machineCount">1</span> machine connected</div>
         </article>
         <article class="metric">
-          <div class="metric-head">Session uptime <span class="metric-mark"></span></div>
-          <div class="metric-value" id="uptime">00:12:48</div>
-          <div class="metric-note">Since host start</div>
+          <div class="metric-head">Last sync <span class="metric-mark"></span></div>
+          <div class="metric-value" id="uptime">--:--:--</div>
+          <div class="metric-note">Updated from host</div>
         </article>
       </section>
 
@@ -348,7 +348,7 @@
                 <div>
                   <div class="map-detail"><span>Game type</span><span id="gameType">Team Slayer</span></div>
                   <div class="map-detail"><span>Netcode</span><span>Distributed</span></div>
-                  <div class="map-detail"><span>Server address</span><span>127.0.0.200</span></div>
+                  <div class="map-detail"><span>Server address</span><span id="serverAddressDetail">--</span></div>
                 </div>
               </div>
             </div>
@@ -357,7 +357,7 @@
           <section class="panel" id="players" aria-labelledby="players-title">
             <div class="panel-heading">
               <h2 id="players-title">Connected players</h2>
-              <button class="button small" id="addPlayer">Add demo player</button>
+              <button class="button small" id="refreshPlayers">Refresh</button>
             </div>
             <div class="table-wrap">
               <table>
@@ -378,16 +378,19 @@
               <form class="queue-form" id="queueForm">
                 <label class="visually-hidden" for="mapSelect">Map</label>
                 <select id="mapSelect">
-                  <option>Blood Gulch</option><option selected>Hang 'Em High</option><option>Battle Creek</option>
-                  <option>Beaver Creek</option><option>Boarding Action</option><option>Chill Out</option>
-                  <option>Derelict</option><option>Gephyrophobia</option><option>Longest</option>
-                  <option>Prisoner</option><option>Rat Race</option><option>Sidewinder</option>
-                  <option>Wizard</option><option>Putput</option>
+                  <option value="beavercreek">Beaver Creek</option><option value="sidewinder">Sidewinder</option>
+                  <option value="damnation">Damnation</option><option value="ratrace">Rat Race</option>
+                  <option value="prisoner" selected>Prisoner</option><option value="hangemhigh">Hang 'Em High</option>
+                  <option value="chillout">Chill Out</option><option value="carousel">Carousel</option>
+                  <option value="boardingaction">Boarding Action</option><option value="bloodgulch">Blood Gulch</option>
+                  <option value="wizard">Wizard</option><option value="putput">Putput</option>
+                  <option value="longest">Longest</option>
                 </select>
                 <label class="visually-hidden" for="typeSelect">Game type</label>
                 <select id="typeSelect">
-                  <option>Slayer</option><option selected>Team Slayer</option><option>CTF</option>
-                  <option>Oddball</option><option>King</option><option>Race</option>
+                  <option value="slayer">Slayer</option><option value="team_slayer" selected>Team Slayer</option>
+                  <option value="ctf">CTF</option><option value="oddball">Oddball</option>
+                  <option value="king">King</option><option value="race">Race</option>
                 </select>
                 <button class="button primary" type="submit">Queue map</button>
               </form>
@@ -410,12 +413,12 @@
           </section>
         </div>
       </div>
-      <footer class="footer-note"><span>READY UP | HALO DEDICATED SERVER</span><span>SIMULATED CONTROLS | NO COMMANDS SENT</span></footer>
+      <footer class="footer-note"><span>READY UP | HALO DEDICATED SERVER</span><span>COMMANDS VIA LOCAL SSH TUNNEL</span></footer>
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script>
+  <script src="/server-dashboard.js" defer>
     const state = {
       serverRunning: true,
       phase: "Lobby",
