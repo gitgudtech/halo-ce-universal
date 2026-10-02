@@ -17,6 +17,9 @@ const state = {
   statsError: "",
   updateStatus: "Not checked",
   updateAvailable: false,
+  updateInstallAvailable: false,
+  updateInstallInProgress: false,
+  latestBuild: 0,
   updateReleaseUrl: "",
   queue: [],
   updatedAt: "--:--:--",
@@ -221,6 +224,8 @@ async function checkForUpdates() {
   try {
     const update = await requestJson("/api/update-check");
     state.updateAvailable = update.updateAvailable;
+    state.updateInstallAvailable = update.installEnabled === true;
+    state.latestBuild = update.latestBuild;
     state.updateReleaseUrl = update.releaseUrl || "";
     if (update.updateAvailable) {
       const current = update.currentBuild > 0 ? `current ${update.currentBuild}` : "current build unknown";
@@ -232,11 +237,46 @@ async function checkForUpdates() {
     }
   } catch (error) {
     state.updateAvailable = false;
+    state.updateInstallAvailable = false;
+    state.latestBuild = 0;
     state.updateReleaseUrl = "";
     state.updateStatus = "Update check failed";
     logEvent(`Update check failed | ${error.message}`, "red");
   } finally {
     updateCheckInProgress = false;
+    render();
+  }
+}
+
+async function installUpdate() {
+  if (!state.updateAvailable || !state.updateInstallAvailable || state.updateInstallInProgress) return;
+  const confirmed = window.confirm(
+    `Install build ${state.latestBuild} and restart the server? ` +
+    `${state.playerCount} connected player(s) will be disconnected.`
+  );
+  if (!confirmed) return;
+
+  state.updateInstallInProgress = true;
+  state.updateStatus = `Installing build ${state.latestBuild}`;
+  render();
+  try {
+    const result = await requestJson("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true })
+    });
+    state.updateAvailable = false;
+    state.updateStatus = `Build ${result.installedBuild} installed; server restarted`;
+    state.buildNumber = result.installedBuild;
+    logEvent(`Server updated to build ${result.installedBuild}`, "amber");
+    notify(`Build ${result.installedBuild} installed`);
+    await refreshSnapshot();
+  } catch (error) {
+    state.updateStatus = `Update failed | ${error.message}`;
+    logEvent(`Update failed | ${error.message}`, "red");
+    notify(`Update failed: ${error.message}`);
+  } finally {
+    state.updateInstallInProgress = false;
     render();
   }
 }
@@ -341,6 +381,10 @@ function render() {
   const releaseLink = document.getElementById("updateReleaseLink");
   releaseLink.hidden = !state.updateAvailable || !state.updateReleaseUrl;
   releaseLink.href = state.updateReleaseUrl || "#";
+  const applyUpdateButton = document.getElementById("applyUpdate");
+  applyUpdateButton.hidden = !state.updateAvailable || !state.updateInstallAvailable;
+  applyUpdateButton.disabled = !state.connected || !state.serverRunning || state.updateInstallInProgress;
+  applyUpdateButton.textContent = state.updateInstallInProgress ? "Updating..." : "Update & restart";
   document.getElementById("queueForm").querySelector("button").disabled = !state.connected || !state.serverRunning;
   renderPlayers();
   renderQueue();
@@ -413,6 +457,7 @@ document.getElementById("endMatch").addEventListener("click", () => runCommand("
 document.getElementById("restartMatch").addEventListener("click", () => runCommand("restart", "Restart requested", "amber"));
 document.getElementById("refreshStatus").addEventListener("click", refreshSnapshot);
 document.getElementById("checkUpdates").addEventListener("click", checkForUpdates);
+document.getElementById("applyUpdate").addEventListener("click", installUpdate);
 document.getElementById("showInvite").addEventListener("click", showInvite);
 document.getElementById("copyInvite").addEventListener("click", copyInvite);
 document.getElementById("refreshPlayers").addEventListener("click", refreshStats);

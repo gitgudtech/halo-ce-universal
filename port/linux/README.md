@@ -193,9 +193,20 @@ default), then run this from the repository root on a computer with SSH access:
 python tools/server_dashboard_server.py --ssh-target user@host
 ```
 
+For a Docker-managed Linux test host, add `--update-container <container-name>`
+to enable the dashboard's confirmed update/restart action. Without it, the
+dashboard only checks for updates and links to the release.
+
 Open `http://127.0.0.1:8765/`. The bridge binds only to loopback, opens an SSH
 tunnel to the host's loopback Telnet console, and accepts only the dashboard's
 admin commands. Do not expose or forward the Telnet port.
+
+The dashboard's update check is read-only by default. For a Docker-managed
+Linux test host, enable confirmed install/restart with
+`--update-container <container-name>`. The bridge downloads the latest Linux
+release, verifies GitHub's SHA-256, preserves the current config and executable,
+then restarts the host on its current map and mode. Connected players are
+disconnected; queued maps are restored after restart.
 
 With Mesa drivers, the game sends its GL calls through the GL thread of
 Mesa. To stop this, set the environment variable `mesa_glthread=false`.
@@ -353,6 +364,42 @@ HALO_NET_ONLINE=false \
 For Internet play, set `HALO_NET_ONLINE=true`. A fixed UDP tunnel port can be
 selected with `HALO_NET_TUNNEL_PORT`; forward that UDP port on the router if
 hole punching does not work. The game writes a fresh invite link at startup.
+
+### Manage the Docker test host
+
+For the Ubuntu test host, run these commands on the Docker host over SSH. The
+container holds the checkout and assets; starting the container does not start
+Halo itself:
+
+```sh
+container=halo-linux-test-20260930
+docker start "$container"
+docker exec -d -w /work \
+  -e HALO_NETWORK_TEST=host:prisoner:slayer \
+  -e HALO_NETWORK_TEST_START=3600 \
+  -e HALO_NET_ONLINE=true \
+  -e HALO_NET_TUNNEL_PORT=5152 \
+  -e HALO_NET_ALLOW_UPNP=false \
+  -e HALO_NET_BROADCAST=192.168.0.255 \
+  -e HALO_HEADLESS=true \
+  -e HALO_SPECTATOR=true \
+  -e HALO_TELNET_CONSOLE=true \
+  -e HALO_TELNET_CONSOLE_PORT=2323 \
+  -e HALO_DATA_ROOT=/work/assets \
+  "$container" ./dist/halo-linux-debug/halo --headless --spectator
+```
+
+Check the process and recent log with `docker exec "$container" ps -eo pid,etime,args`
+and `docker exec "$container" tail -n 30 /work/assets/debug.txt`. Stop only the
+Halo process with:
+
+```sh
+docker exec "$container" sh -c 'pids=$(pgrep -f "^./dist/halo-linux-debug/halo --headless --spectator$"); [ -z "$pids" ] || kill $pids'
+```
+
+Use `docker stop "$container"` only to stop the whole test container. UDP
+5152 is the game tunnel port; Telnet 2323 is loopback-only and must not be
+forwarded.
 
 The native Telnet console is disabled by default. Enable it with
 `HALO_TELNET_CONSOLE=true`; it listens on loopback at port 2323 by default

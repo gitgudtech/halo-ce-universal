@@ -469,6 +469,14 @@ static char const *telnet_console_gametype_name(
 	return "custom";
 }
 
+static boolean telnet_console_team_score_uses_time_format(
+	struct network_game const *game)
+{
+	return game->variant.game_engine_index == game_engine_king ||
+		(game->variant.game_engine_index == game_engine_oddball &&
+			game->variant.game_engine_variant.oddball.oddball_ball_type != 2);
+}
+
 static boolean telnet_console_admin_command(
 	char const *command,
 	struct telnet_client *client)
@@ -561,8 +569,18 @@ static boolean telnet_console_admin_command(
 		{
 			for (team_index = 0; team_index < MAXIMUM_MULTIPLAYER_GAME_TEAMS; team_index++)
 			{
-				snprintf(response, sizeof(response), "team id=%ld score=%ld",
-					team_index, game_engine_get_team_score(team_index));
+				long team_score = game_engine_get_team_score(team_index);
+				char score_text[64];
+
+				if (telnet_console_team_score_uses_time_format(game))
+				{
+					wchar_t wide_score[128] = { 0 };
+					ticks_to_unicode_time_string(team_score, NUMBEROF(wide_score), wide_score);
+					wide_to_ascii(wide_score, score_text, sizeof(score_text));
+				}
+				else
+					snprintf(score_text, sizeof(score_text), "%ld", team_score);
+				snprintf(response, sizeof(response), "team id=%ld score=%s", team_index, score_text);
 				telnet_console_admin_reply(client, response);
 			}
 		}
@@ -593,24 +611,28 @@ static boolean telnet_console_admin_command(
 			else
 			{
 				datum = player_get(datum_index);
-				if (game_engine && game_engine->get_player_score)
+				{
+					char score_text[64] = "";
+					if (game_engine && game_engine->format_player_score)
+					{
+						wchar_t wide_score[128] = { 0 };
+						game_engine->format_player_score(datum_index, wide_score);
+						wide_to_ascii(wide_score, score_text, sizeof(score_text));
+					}
+					if (!score_text[0] && game_engine && game_engine->get_player_score)
+						snprintf(score_text, sizeof(score_text), "%ld",
+							game_engine->get_player_score(datum_index, _get_score_individual));
+					if (!score_text[0])
+						csstrcpy(score_text, "na");
 				{
 					snprintf(response, sizeof(response),
-						"stat id=%ld score=%ld kills=%ld assists=%ld deaths=%ld",
+						"stat id=%ld score=%s kills=%ld assists=%ld deaths=%ld",
 						player_index,
-						game_engine->get_player_score(datum_index, _get_score_individual),
+						score_text,
 						(long)datum->statistics.kills[0],
 						(long)datum->statistics.assists[0],
 						(long)datum->statistics.deaths);
 				}
-				else
-				{
-					snprintf(response, sizeof(response),
-						"stat id=%ld score=na kills=%ld assists=%ld deaths=%ld",
-						player_index,
-						(long)datum->statistics.kills[0],
-						(long)datum->statistics.assists[0],
-						(long)datum->statistics.deaths);
 				}
 			}
 			telnet_console_admin_reply(client, response);
